@@ -8,27 +8,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.drogi.ui.theme.DrogiTheme
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
-
-data class Route(val id: String, val name: String, val description: String)
-
-val sampleRoutes = listOf(
-    Route("1", "Rusałka Loop", "Świetna trasa biegowa dookoła jeziora Rusałka w Poznaniu. Dystans ok. 4.5 km. Nawierzchnia szutrowa, brak większych wzniesień."),
-    Route("2", "Wartostrada Rowerowa", "Asfaltowa trasa rowerowa wzdłuż rzeki Warty. Idealna na szybki trening szosowy z dala od ruchu samochodowego."),
-    Route("3", "Rezerwat Morasko", "Wymagająca trasa z podbiegami w pobliżu rezerwatu meteorytów. Dużo korzeni i nierówności.")
-)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,17 +41,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-
 @Composable
-fun AppNavigation() {
+fun AppNavigation(routeViewModel: RouteViewModel = viewModel()) {
     val navController = rememberNavController()
+
+    val routes by routeViewModel.routes.collectAsState()
 
     NavHost(navController = navController, startDestination = "routeList") {
         // pierwszy ekran
         composable("routeList") {
-            RouteListScreen(onRouteClick = { routeId ->
-                navController.navigate("routeDetail/$routeId")
-            })
+            RouteListScreen(
+                routes = routes,
+                onRouteClick = { routeId ->
+                    navController.navigate("routeDetail/$routeId")
+                }
+            )
         }
         //drugi ekran
         composable(
@@ -65,17 +63,21 @@ fun AppNavigation() {
             arguments = listOf(navArgument("routeId") { type = NavType.StringType })
         ) { backStackEntry ->
             val routeId = backStackEntry.arguments?.getString("routeId")
-            val selectedRoute = sampleRoutes.find { it.id == routeId }
-            RouteDetailScreen(route = selectedRoute,
-                onBackClick = { navController.popBackStack() })
+
+            val selectedRoute = routeViewModel.getRouteById(routeId)
+
+            RouteDetailScreen(
+                route = selectedRoute,
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }
 
-// pierszy ekran
+// pierwszy ekran
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteListScreen(onRouteClick: (String) -> Unit) {
+fun RouteListScreen(routes: List<Route>, onRouteClick: (String) -> Unit) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Dostępne trasy") }) }
     ) { paddingValues ->
@@ -85,13 +87,12 @@ fun RouteListScreen(onRouteClick: (String) -> Unit) {
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            items(sampleRoutes) { route ->
+            items(routes) { route ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
-                        .clickable { onRouteClick(route.id) },
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        .clickable { onRouteClick(route.id) }
                 ) {
                     Text(
                         text = route.name,
@@ -114,7 +115,7 @@ fun RouteDetailScreen(route: Route?, onBackClick: () -> Unit) {
                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(text = "Powrót")}}
-            )}
+        )}
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -129,8 +130,8 @@ fun RouteDetailScreen(route: Route?, onBackClick: () -> Unit) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 Text(
-                    text = route.description,
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyLarge,
+                    text = route.description
                 )
             } else {
                 Text("Wystąpił błąd podczas ładowania danych.")
