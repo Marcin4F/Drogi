@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation()
+                    AdaptiveAppScreen()
                 }
             }
         }
@@ -42,33 +42,75 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(routeViewModel: RouteViewModel = viewModel()) {
+fun AdaptiveAppScreen(viewModel: RouteViewModel = viewModel()) {
+    // sprawdzenie szerokosci ekranu
+    BoxWithConstraints {
+        if (maxWidth < 600.dp) {
+            // telefon
+            PhoneNavigation(viewModel)
+        } else {
+            // tablet
+            TabletSplitScreen(viewModel)
+        }
+    }
+}
+
+// dla telefonow
+@Composable
+fun PhoneNavigation(viewModel: RouteViewModel) {
     val navController = rememberNavController()
-
-    val routes by routeViewModel.routes.collectAsState()
-
     NavHost(navController = navController, startDestination = "routeList") {
-        // pierwszy ekran
         composable("routeList") {
             RouteListScreen(
-                routes = routes,
+                viewModel = viewModel,
                 onRouteClick = { routeId ->
                     navController.navigate("routeDetail/$routeId")
                 }
             )
         }
-        //drugi ekran
         composable(
             route = "routeDetail/{routeId}",
             arguments = listOf(navArgument("routeId") { type = NavType.StringType })
         ) { backStackEntry ->
             val routeId = backStackEntry.arguments?.getString("routeId")
-
-            val selectedRoute = routeViewModel.getRouteById(routeId)
+            val selectedRoute = viewModel.getRouteById(routeId)
 
             RouteDetailScreen(
                 route = selectedRoute,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() } // Na telefonie podajemy akcję powrotu
+            )
+        }
+    }
+}
+
+// dla tabletow
+@Composable
+fun TabletSplitScreen(viewModel: RouteViewModel) {
+    // aktualnie wybrana trasa
+    val selectedRouteDetail by viewModel.selectedRouteDetail.collectAsState()
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        // lewa strona z trasami
+        Box(modifier = Modifier.weight(1f)) {
+            RouteListScreen(
+                viewModel = viewModel,
+                onRouteClick = { routeId ->
+                    viewModel.selectRouteForDetail(routeId)
+                }
+            )
+        }
+
+        // podzial ekranow
+        VerticalDivider(
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+            modifier = Modifier.fillMaxHeight()
+        )
+
+        // prawa strona
+        Box(modifier = Modifier.weight(1.5f)) {
+            RouteDetailScreen(
+                route = selectedRouteDetail,
+                onBackClick = null // ukrycie przycisku powrotu
             )
         }
     }
@@ -77,9 +119,32 @@ fun AppNavigation(routeViewModel: RouteViewModel = viewModel()) {
 // pierwszy ekran
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteListScreen(routes: List<Route>, onRouteClick: (String) -> Unit) {
+fun RouteListScreen(
+    viewModel: RouteViewModel,
+    onRouteClick: (String) -> Unit
+) {
+    val routes by viewModel.filteredRoutes.collectAsState()
+    val selectedType by viewModel.selectedType.collectAsState()
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Dostępne trasy") }) }
+        topBar = {
+            Column {
+                TopAppBar(title = { Text("Dostępne trasy") })
+
+                TabRow(selectedTabIndex = if (selectedType == RouteType.RUNNING) 0 else 1) {
+                    Tab(
+                        selected = selectedType == RouteType.RUNNING,
+                        onClick = { viewModel.selectType(RouteType.RUNNING) },
+                        text = { Text("Biegowe") }
+                    )
+                    Tab(
+                        selected = selectedType == RouteType.CYCLING,
+                        onClick = { viewModel.selectType(RouteType.CYCLING) },
+                        text = { Text("Rowerowe") }
+                    )
+                }
+            }
+        }
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -92,7 +157,8 @@ fun RouteListScreen(routes: List<Route>, onRouteClick: (String) -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
-                        .clickable { onRouteClick(route.id) }
+                        .clickable { onRouteClick(route.id) },
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Text(
                         text = route.name,
@@ -108,13 +174,16 @@ fun RouteListScreen(routes: List<Route>, onRouteClick: (String) -> Unit) {
 // drugi ekran
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteDetailScreen(route: Route?, onBackClick: () -> Unit) {
+fun RouteDetailScreen(route: Route?, onBackClick: (() -> Unit)? = null) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text(route?.name ?: "Nie znaleziono trasy") },
-            navigationIcon = { TextButton(onClick = onBackClick) {
-                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(text = "Powrót")}}
+        topBar = { TopAppBar(title = { Text(route?.name ?: "Wybierz trasę z listy") },
+            navigationIcon = {
+                if (onBackClick != null){
+                    TextButton(onClick = onBackClick) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Powrót")}}
+                }
         )}
     ) { paddingValues ->
         Column(
