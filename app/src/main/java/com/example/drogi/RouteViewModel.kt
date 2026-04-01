@@ -18,10 +18,6 @@ class RouteViewModel : ViewModel() {
     private val _filteredRoutes = MutableStateFlow<List<Route>>(emptyList())
     val filteredRoutes: StateFlow<List<Route>> = _filteredRoutes.asStateFlow()
 
-    // widok tabletu
-    private val _selectedRouteDetail = MutableStateFlow<Route?>(null)
-    val selectedRouteDetail: StateFlow<Route?> = _selectedRouteDetail.asStateFlow()
-
     init {
         loadRoutes()
         updateFilteredList()
@@ -51,7 +47,10 @@ class RouteViewModel : ViewModel() {
     }
 
     // dla tabletu
+    private val _selectedRouteId = MutableStateFlow<String?>(null)
+    val selectedRouteId: StateFlow<String?> = _selectedRouteId.asStateFlow()
+
     fun selectRouteForDetail(routeId: String) {
-        _selectedRouteDetail.value = getRouteById(routeId)
+        _selectedRouteId.value = routeId
     }
 }

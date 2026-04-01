@@ -77,6 +77,7 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
 
             RouteDetailScreen(
                 route = selectedRoute,
+                requestedRouteId = routeId,
                 onBackClick = { navController.popBackStack() } // Na telefonie podajemy akcję powrotu
             )
         }
@@ -87,7 +88,8 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
 @Composable
 fun TabletSplitScreen(viewModel: RouteViewModel) {
     // aktualnie wybrana trasa
-    val selectedRouteDetail by viewModel.selectedRouteDetail.collectAsState()
+    val selectedRouteId by viewModel.selectedRouteId.collectAsState()
+    val selectedRoute = viewModel.getRouteById(selectedRouteId)
 
     Row(modifier = Modifier.fillMaxSize()) {
         // lewa strona z trasami
@@ -109,7 +111,8 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
         // prawa strona
         Box(modifier = Modifier.weight(1.5f)) {
             RouteDetailScreen(
-                route = selectedRouteDetail,
+                route = selectedRoute,
+                requestedRouteId = selectedRouteId,
                 onBackClick = null // ukrycie przycisku powrotu
             )
         }
@@ -174,7 +177,7 @@ fun RouteListScreen(
 // drugi ekran
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteDetailScreen(route: Route?, onBackClick: (() -> Unit)? = null) {
+fun RouteDetailScreen(route: Route?, requestedRouteId: String?, onBackClick: (() -> Unit)? = null) {
     Scaffold(
         topBar = { TopAppBar(title = { Text(route?.name ?: "Wybierz trasę z listy") },
             navigationIcon = {
@@ -202,9 +205,9 @@ fun RouteDetailScreen(route: Route?, onBackClick: (() -> Unit)? = null) {
                     style = MaterialTheme.typography.bodyLarge,
                     text = route.description
                 )
-            } else {
-                Text("Wystąpił błąd podczas ładowania danych.")
-            }
+                } else if(requestedRouteId != null) {
+                    Text("Wystąpił błąd podczas ładowania danych.")
+                }
         }
     }
 }
