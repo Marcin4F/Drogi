@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -23,6 +24,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.drogi.ui.theme.DrogiTheme
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.filled.PlayArrow
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,6 +68,10 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
                 viewModel = viewModel,
                 onRouteClick = { routeId ->
                     navController.navigate("routeDetail/$routeId")
+                },
+                onActiveTimerClick = { activeId ->
+                    // Przechodzimy bezpośrednio do trasy, która ma włączony stoper
+                    navController.navigate("routeDetail/$activeId")
                 }
             )
         }
@@ -78,7 +85,14 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
             RouteDetailScreen(
                 route = selectedRoute,
                 requestedRouteId = routeId,
-                onBackClick = { navController.popBackStack() } // Na telefonie podajemy akcję powrotu
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }, // Na telefonie podajemy akcję powrotu
+                onNavigateToActiveRoute = { activeId ->
+                    // Czyścimy stos i idziemy do aktywnej trasy
+                    navController.navigate("routeDetail/$activeId") {
+                        popUpTo("routeList")
+                    }
+                }
             )
         }
     }
@@ -98,6 +112,10 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
                 viewModel = viewModel,
                 onRouteClick = { routeId ->
                     viewModel.selectRouteForDetail(routeId)
+                },
+                onActiveTimerClick = { activeId ->
+                    // NOWE: Pływający przycisk na tablecie po prostu przełącza prawy panel na aktywną trasę
+                    viewModel.selectRouteForDetail(activeId)
                 }
             )
         }
@@ -113,7 +131,11 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
             RouteDetailScreen(
                 route = selectedRoute,
                 requestedRouteId = selectedRouteId,
-                onBackClick = null // ukrycie przycisku powrotu
+                viewModel = viewModel,
+                onBackClick = null, // ukrycie przycisku powrotu
+                onNavigateToActiveRoute = { activeId ->
+                    viewModel.selectRouteForDetail(activeId)
+                }
             )
         }
     }
@@ -124,10 +146,13 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
 @Composable
 fun RouteListScreen(
     viewModel: RouteViewModel,
-    onRouteClick: (String) -> Unit
+    onRouteClick: (String) -> Unit,
+    onActiveTimerClick: (String) -> Unit
 ) {
     val routes by viewModel.filteredRoutes.collectAsState()
     val selectedType by viewModel.selectedType.collectAsState()
+    val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
+    val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
 
     Scaffold(
         topBar = {
@@ -146,6 +171,16 @@ fun RouteListScreen(
                         text = { Text("Rowerowe") }
                     )
                 }
+            }
+        },
+        floatingActionButton = {
+            if (activeTimerId != null) {
+                val activeRoute = viewModel.getRouteById(activeTimerId)
+                FloatingTimer(
+                    elapsedTime = viewModel.formatTime(elapsedSeconds),
+                    routeName = activeRoute?.name ?: "",
+                    onClick = { onActiveTimerClick(activeTimerId!!) }
+                )
             }
         }
     ) { paddingValues ->
@@ -177,17 +212,73 @@ fun RouteListScreen(
 // drugi ekran
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RouteDetailScreen(route: Route?, requestedRouteId: String?, onBackClick: (() -> Unit)? = null) {
+fun RouteDetailScreen(
+    route: Route?,
+    requestedRouteId: String?,
+    viewModel: RouteViewModel,
+    onBackClick: (() -> Unit)? = null,
+    onNavigateToActiveRoute: (String) -> Unit
+) {
+    val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
+    val isRunning by viewModel.isTimerRunning.collectAsState()
+    val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text(route?.name ?: "Wybierz trasę z listy") },
-            navigationIcon = {
-                if (onBackClick != null){
-                    TextButton(onClick = onBackClick) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Powrót")}}
+        topBar = {
+            TopAppBar(
+                title = { Text(route?.name ?: "Wybierz trasę z listy") },
+                navigationIcon = {
+                    if (onBackClick != null) {
+                        TextButton(onClick = onBackClick) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "Powrót")
+                        }
+                    }
                 }
-        )}
+            )
+        },
+        bottomBar = {
+            if (route != null) {
+                // Sprawdzamy, czy stoper jest wolny lub należy do TEJ trasy
+                if (activeTimerId == null || activeTimerId == route.id) {
+                    StopwatchBar(
+                        elapsedTime = viewModel.formatTime(elapsedSeconds),
+                        isRunning = isRunning,
+                        onStart = { viewModel.startTimer(route.id) },
+                        onStop = { viewModel.stopTimer() },
+                        onReset = { viewModel.resetTimer() }
+                    )
+                } else {
+                    // Stoper zajęty przez inną trasę
+                    val activeRoute = viewModel.getRouteById(activeTimerId)
+
+                    // Używamy secondaryContainer, aby komunikat odznaczał się od reszty aplikacji, ale nie wyglądał jak błąd
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Zwykły Row, który sprawiamy klikalnym na całej szerokości
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onNavigateToActiveRoute(activeTimerId!!) }
+                                .navigationBarsPadding() // TO NAPRAWIA NAKŁADANIE SIĘ NA PRZYCISKI SYSTEMOWE!
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Działa stoper trasy: ${activeRoute?.name}.\nKliknij, aby wrócić.",
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                }
+            }
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -205,9 +296,67 @@ fun RouteDetailScreen(route: Route?, requestedRouteId: String?, onBackClick: (()
                     style = MaterialTheme.typography.bodyLarge,
                     text = route.description
                 )
-                } else if(requestedRouteId != null) {
-                    Text("Wystąpił błąd podczas ładowania danych.")
-                }
+            } else if (requestedRouteId != null) {
+                Text("Wystąpił błąd podczas ładowania danych.")
+            }
         }
     }
+}
+
+@Composable
+fun StopwatchBar(
+    elapsedTime: String,
+    isRunning: Boolean,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .navigationBarsPadding(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = elapsedTime,
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Row {
+                if (!isRunning) {
+                    Button(onClick = onStart) { Text("Start") }
+                } else {
+                    Button(onClick = onStop) { Text("Stop") }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(onClick = onReset) { Text("Przerwij") }
+            }
+        }
+    }
+}
+
+@Composable
+fun FloatingTimer(
+    elapsedTime: String,
+    routeName: String,
+    onClick: () -> Unit
+) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+        text = {
+            Column {
+                Text(text = elapsedTime, style = MaterialTheme.typography.titleMedium)
+                Text(text = routeName, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    )
 }
