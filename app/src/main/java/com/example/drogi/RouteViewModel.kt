@@ -24,17 +24,23 @@ class RouteViewModel : ViewModel() {
 
     init {
         loadRoutes()
-        updateFilteredList()
     }
 
     private fun loadRoutes() {
-        _allRoutes.value = listOf(
-            Route("1", "Rusałka Loop", "Świetna trasa biegowa dookoła jeziora Rusałka w Poznaniu. Dystans ok. 4.5 km. Nawierzchnia szutrowa, brak większych wzniesień.", RouteType.RUNNING),
-            Route("2", "Wartostrada", "Asfaltowa trasa rowerowa wzdłuż rzeki Warty. Idealna na szybki trening szosowy z dala od ruchu samochodowego.", RouteType.CYCLING),
-            Route("3", "Rezerwat Morasko", "Wymagająca trasa z podbiegami w pobliżu rezerwatu meteorytów. Dużo korzeni i nierówności.", RouteType.RUNNING),
-            Route("4", "Puszcza Zielonka", "Leśna trasa dla rowerów górskich.", RouteType.CYCLING)
-        )
-        updateFilteredList()
+        // uruchomienie w tle
+        viewModelScope.launch {
+            try {
+                val downloadedRoutes = RetrofitClient.apiService.getRoutes()
+                _allRoutes.value = downloadedRoutes
+                updateFilteredList()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // TODO: zmienic na baze danych
+                _allRoutes.value = emptyList()
+                updateFilteredList()
+            }
+        }
     }
 
     fun selectType(type: RouteType) {
@@ -103,7 +109,7 @@ class RouteViewModel : ViewModel() {
         _activeTimerRouteId.value = null
     }
 
-    // Pomocnicza funkcja do formatowania czasu
+    // formatowanie czasu
     fun formatTime(seconds: Long): String {
         val h = seconds / 3600
         val m = (seconds % 3600) / 60

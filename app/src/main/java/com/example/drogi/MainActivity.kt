@@ -25,7 +25,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.drogi.ui.theme.DrogiTheme
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material.icons.filled.PlayArrow
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,7 +69,7 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
                     navController.navigate("routeDetail/$routeId")
                 },
                 onActiveTimerClick = { activeId ->
-                    // Przechodzimy bezpośrednio do trasy, która ma włączony stoper
+                    // przejscie do trasy ze stoperem
                     navController.navigate("routeDetail/$activeId")
                 }
             )
@@ -86,9 +85,8 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
                 route = selectedRoute,
                 requestedRouteId = routeId,
                 viewModel = viewModel,
-                onBackClick = { navController.popBackStack() }, // Na telefonie podajemy akcję powrotu
+                onBackClick = { navController.popBackStack() },
                 onNavigateToActiveRoute = { activeId ->
-                    // Czyścimy stos i idziemy do aktywnej trasy
                     navController.navigate("routeDetail/$activeId") {
                         popUpTo("routeList")
                     }
@@ -114,7 +112,6 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
                     viewModel.selectRouteForDetail(routeId)
                 },
                 onActiveTimerClick = { activeId ->
-                    // NOWE: Pływający przycisk na tablecie po prostu przełącza prawy panel na aktywną trasę
                     viewModel.selectRouteForDetail(activeId)
                 }
             )
@@ -238,9 +235,9 @@ fun RouteDetailScreen(
                 }
             )
         },
+        // stoper
         bottomBar = {
             if (route != null) {
-                // Sprawdzamy, czy stoper jest wolny lub należy do TEJ trasy
                 if (activeTimerId == null || activeTimerId == route.id) {
                     StopwatchBar(
                         elapsedTime = viewModel.formatTime(elapsedSeconds),
@@ -250,21 +247,18 @@ fun RouteDetailScreen(
                         onReset = { viewModel.resetTimer() }
                     )
                 } else {
-                    // Stoper zajęty przez inną trasę
                     val activeRoute = viewModel.getRouteById(activeTimerId)
 
-                    // Używamy secondaryContainer, aby komunikat odznaczał się od reszty aplikacji, ale nie wyglądał jak błąd
                     Surface(
                         color = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Zwykły Row, który sprawiamy klikalnym na całej szerokości
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onNavigateToActiveRoute(activeTimerId!!) }
-                                .navigationBarsPadding() // TO NAPRAWIA NAKŁADANIE SIĘ NA PRZYCISKI SYSTEMOWE!
+                                .navigationBarsPadding()
                                 .padding(16.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
@@ -351,7 +345,7 @@ fun FloatingTimer(
         onClick = onClick,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        icon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+        icon = { },
         text = {
             Column {
                 Text(text = elapsedTime, style = MaterialTheme.typography.titleMedium)
