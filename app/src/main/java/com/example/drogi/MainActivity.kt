@@ -28,6 +28,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.IconButton
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,7 +46,13 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AdaptiveAppScreen()
+                    // inicjalizacaj bazy
+                    val db = AppDatabase.getDatabase(applicationContext)
+
+                    val viewModel: RouteViewModel = viewModel(
+                        factory = RouteViewModelFactory(db.routeResultDao())
+                    )
+                    AdaptiveAppScreen(viewModel = viewModel)
                 }
             }
         }
@@ -47,7 +60,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AdaptiveAppScreen(viewModel: RouteViewModel = viewModel()) {
+fun AdaptiveAppScreen(viewModel: RouteViewModel) {
     // sprawdzenie szerokosci ekranu
     BoxWithConstraints {
         if (maxWidth < 600.dp) {
@@ -222,8 +235,38 @@ fun RouteDetailScreen(
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val isRunning by viewModel.isTimerRunning.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
-    val allSavedResults by viewModel.savedResults.collectAsState()
-    val topResults = if (route != null) viewModel.getTopResultsForRoute(route.id) else emptyList()
+    val showAllResults = remember { mutableStateOf(false) }
+    val showResetConfirmation = remember { mutableStateOf(false) }
+
+    if (showAllResults.value && route != null) {
+        AllResultsDialog(
+            routeId = route.id,
+            routeName = route.name,
+            viewModel = viewModel,
+            onDismiss = { showAllResults.value = false }
+        )
+    }
+
+    if (showResetConfirmation.value) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmation.value = false },
+            title = { Text("Resetowanie stopera") },
+            text = { Text("Czy na pewno chcesz przerwać i zresetować stoper? Niezapisany czas zostanie utracony.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetTimer()
+                    showResetConfirmation.value = false
+                }) {
+                    Text("Zresetuj", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmation.value = false }) {
+                    Text("Anuluj")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -247,7 +290,11 @@ fun RouteDetailScreen(
                     Column {
                         // tabela wyników
                         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            BestResultsTable(results = topResults, viewModel = viewModel)
+                            BestResultsTable(
+                                routeId = route.id,
+                                viewModel = viewModel,
+                                onTableClick = { showAllResults.value = true }
+                            )
                         }
                         StopwatchBar(
                             elapsedTime = viewModel.formatTime(elapsedSeconds),
@@ -255,7 +302,7 @@ fun RouteDetailScreen(
                             hasTime = elapsedSeconds > 0,
                             onStart = { viewModel.startTimer(route.id) },
                             onStop = { viewModel.stopTimer() },
-                            onReset = { viewModel.resetTimer() },
+                            onReset = { showResetConfirmation.value = true },
                             onSave = { viewModel.saveCurrentResult(route.id) }
                         )
                     }
@@ -341,7 +388,7 @@ fun StopwatchBar(
             Row {
                 if (!isRunning) {
                     if (hasTime) {
-                        Button(onClick = onSave, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
+                        Button(onClick = onSave) {
                             Text("Zapisz")
                         }
                         Spacer(modifier = Modifier.width(8.dp))
@@ -394,38 +441,100 @@ fun FloatingTimer(
 
 // tabela z najlepszymi wynikami
 @Composable
-fun BestResultsTable(results: List<RouteResult>, viewModel: RouteViewModel) {
+fun BestResultsTable(
+    routeId: String,
+    viewModel: RouteViewModel,
+    onTableClick: () -> Unit // Akcja kliknięcia
+) {
+    // CollectAsState z Flow automatycznie odświeży UI po zapisie!
+    val results by viewModel.getTopResultsForRoute(routeId).collectAsState(initial = emptyList())
+
     if (results.isEmpty()) return
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp),
+            .padding(bottom = 16.dp)
+            .clickable { onTableClick() }, // Tabela jest klikalna
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Twoje Najlepsze Wyniki",
+                text = "Twoje Najlepsze Wyniki (Kliknij po więcej)",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            // Nagłówki z trzema kolumnami
+            Row(modifier = Modifier.fillMaxWidth()) {
                 Text(text = "Czas", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-                Text(text = "Data", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.End)
+                Text(text = "Data", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                Text(text = "Godzina", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.End)
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
             results.forEach { result ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = viewModel.formatTime(result.timeInSeconds), style = MaterialTheme.typography.bodyMedium)
-                    Text(text = result.date, style = MaterialTheme.typography.bodySmall)
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text(text = viewModel.formatTime(result.timeInSeconds), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    // Rozdzielamy datę i godzinę
+                    Text(text = formatTimestamp(result.timestamp, "dd.MM.yyyy"), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                    Text(text = formatTimestamp(result.timestamp, "HH:mm"), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.End)
                 }
             }
         }
     }
+}
+
+@Composable
+fun AllResultsDialog(
+    routeId: String,
+    routeName: String,
+    viewModel: RouteViewModel,
+    onDismiss: () -> Unit
+) {
+    val allResults by viewModel.getAllResultsForRoute(routeId).collectAsState(initial = emptyList())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wszystkie czasy: $routeName") },
+        text = {
+            LazyColumn {
+                items(allResults) { result ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = viewModel.formatTime(result.timeInSeconds),
+                            modifier = Modifier.weight(1f),
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            text = formatTimestamp(result.timestamp, "dd.MM.yyyy HH:mm"),
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center
+                        )
+                        // przycisk usuwania
+                        IconButton(onClick = { viewModel.deleteResult(result) }) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Usuń wynik",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } }
+    )
+}
+
+fun formatTimestamp(timestamp: Long, pattern: String): String {
+    val sdf = SimpleDateFormat(pattern, Locale.getDefault())
+    return sdf.format(Date(timestamp))
 }

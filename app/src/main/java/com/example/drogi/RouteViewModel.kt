@@ -8,9 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
+import androidx.lifecycle.ViewModelProvider
 import java.util.Locale
+import kotlinx.coroutines.flow.Flow
 
 enum class RouteType { RUNNING, CYCLING }
 
@@ -20,22 +20,13 @@ data class Route(
     val description: String,
     val type: RouteType)
 
-data class RouteResult(
-    val timeInSeconds: Long,
-    val date: String
-)
-
-class RouteViewModel : ViewModel() {
-
+class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _allRoutes = MutableStateFlow<List<Route>>(emptyList())
     private val _selectedType = MutableStateFlow(RouteType.RUNNING)
     val selectedType: StateFlow<RouteType> = _selectedType.asStateFlow()
 
     private val _filteredRoutes = MutableStateFlow<List<Route>>(emptyList())
     val filteredRoutes: StateFlow<List<Route>> = _filteredRoutes.asStateFlow()
-
-    private val _savedResults = MutableStateFlow<Map<String, List<RouteResult>>>(emptyMap())
-    val savedResults: StateFlow<Map<String, List<RouteResult>>> = _savedResults.asStateFlow()
 
     init {
         loadRoutes()
@@ -131,33 +122,50 @@ class RouteViewModel : ViewModel() {
         val s = seconds % 60
 
         return if (h > 0) {
-            String.format("%02d:%02d", h, m)
+            String.format(Locale.getDefault(), "%02d:%02d:%02d", h, m, s)
         } else {
-            String.format("%02d:%02d", m, s)
+            String.format(Locale.getDefault(), "%02d:%02d", m, s)
         }
     }
 
-    //zapisywanie czasów
+    // baza danych
     fun saveCurrentResult(routeId: String) {
         val currentTime = _elapsedSeconds.value
         if (currentTime <= 0) return
 
-        val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-        val dateString = sdf.format(Date())
-        val newResult = RouteResult(currentTime, dateString)
-
-        val currentRouteResults = _savedResults.value[routeId] ?: emptyList()
-
-        val updatedMap = _savedResults.value.toMutableMap()
-        updatedMap[routeId] = currentRouteResults + newResult
-        _savedResults.value = updatedMap
+        viewModelScope.launch {
+            val newResult = RouteResultEntity(
+                routeId = routeId,
+                timeInSeconds = currentTime,
+                timestamp = System.currentTimeMillis()
+            )
+            dao.insertResult(newResult) // zapis do bazy
+        }
 
         resetTimer()
     }
 
-    fun getTopResultsForRoute(routeId: String): List<RouteResult> {
-        return _savedResults.value[routeId]
-            ?.sortedBy { it.timeInSeconds }
-            ?.take(3) ?: emptyList()
+    fun getTopResultsForRoute(routeId: String): Flow<List<RouteResultEntity>> {
+        return dao.getTop3ForRoute(routeId)
+    }
+
+    fun getAllResultsForRoute(routeId: String): Flow<List<RouteResultEntity>> {
+        return dao.getAllForRoute(routeId)
+    }
+
+    fun deleteResult(result: RouteResultEntity) {
+        viewModelScope.launch {
+            dao.deleteResult(result)
+        }
+    }
+}
+
+class RouteViewModelFactory(private val dao: RouteResultDao) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(RouteViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return RouteViewModel(dao) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
