@@ -25,6 +25,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.drogi.ui.theme.DrogiTheme
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Stop
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -219,6 +222,8 @@ fun RouteDetailScreen(
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val isRunning by viewModel.isTimerRunning.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
+    val allSavedResults by viewModel.savedResults.collectAsState()
+    val topResults = if (route != null) viewModel.getTopResultsForRoute(route.id) else emptyList()
 
     Scaffold(
         topBar = {
@@ -239,13 +244,21 @@ fun RouteDetailScreen(
         bottomBar = {
             if (route != null) {
                 if (activeTimerId == null || activeTimerId == route.id) {
-                    StopwatchBar(
-                        elapsedTime = viewModel.formatTime(elapsedSeconds),
-                        isRunning = isRunning,
-                        onStart = { viewModel.startTimer(route.id) },
-                        onStop = { viewModel.stopTimer() },
-                        onReset = { viewModel.resetTimer() }
-                    )
+                    Column {
+                        // tabela wyników
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            BestResultsTable(results = topResults, viewModel = viewModel)
+                        }
+                        StopwatchBar(
+                            elapsedTime = viewModel.formatTime(elapsedSeconds),
+                            isRunning = isRunning,
+                            hasTime = elapsedSeconds > 0,
+                            onStart = { viewModel.startTimer(route.id) },
+                            onStop = { viewModel.stopTimer() },
+                            onReset = { viewModel.resetTimer() },
+                            onSave = { viewModel.saveCurrentResult(route.id) }
+                        )
+                    }
                 } else {
                     val activeRoute = viewModel.getRouteById(activeTimerId)
 
@@ -297,13 +310,16 @@ fun RouteDetailScreen(
     }
 }
 
+// stoper
 @Composable
 fun StopwatchBar(
     elapsedTime: String,
     isRunning: Boolean,
+    hasTime: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onReset: () -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -324,17 +340,38 @@ fun StopwatchBar(
             )
             Row {
                 if (!isRunning) {
-                    Button(onClick = onStart) { Text("Start") }
+                    if (hasTime) {
+                        Button(onClick = onSave, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
+                            Text("Zapisz")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Button(onClick = onStart) {Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = "Start"
+                    )
+                        }
                 } else {
-                    Button(onClick = onStop) { Text("Stop") }
+                    Button(onClick = onStop) {
+                        Icon(
+                            imageVector = Icons.Filled.Pause,
+                            contentDescription = "Pauza"
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                OutlinedButton(onClick = onReset) { Text("Przerwij") }
+                OutlinedButton(onClick = onReset) {
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = "Przerwij"
+                    )
+                }
             }
         }
     }
 }
 
+// pływający stoper
 @Composable
 fun FloatingTimer(
     elapsedTime: String,
@@ -353,4 +390,42 @@ fun FloatingTimer(
             }
         }
     )
+}
+
+// tabela z najlepszymi wynikami
+@Composable
+fun BestResultsTable(results: List<RouteResult>, viewModel: RouteViewModel) {
+    if (results.isEmpty()) return
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Twoje Najlepsze Wyniki",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = "Czas", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
+                Text(text = "Data", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.End)
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            results.forEach { result ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = viewModel.formatTime(result.timeInSeconds), style = MaterialTheme.typography.bodyMedium)
+                    Text(text = result.date, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
 }

@@ -8,10 +8,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 enum class RouteType { RUNNING, CYCLING }
 
-data class Route(val id: String, val name: String, val description: String, val type: RouteType)
+data class Route(
+    val id: String,
+    val name: String,
+    val description: String,
+    val type: RouteType)
+
+data class RouteResult(
+    val timeInSeconds: Long,
+    val date: String
+)
 
 class RouteViewModel : ViewModel() {
 
@@ -21,6 +33,9 @@ class RouteViewModel : ViewModel() {
 
     private val _filteredRoutes = MutableStateFlow<List<Route>>(emptyList())
     val filteredRoutes: StateFlow<List<Route>> = _filteredRoutes.asStateFlow()
+
+    private val _savedResults = MutableStateFlow<Map<String, List<RouteResult>>>(emptyMap())
+    val savedResults: StateFlow<Map<String, List<RouteResult>>> = _savedResults.asStateFlow()
 
     init {
         loadRoutes()
@@ -120,5 +135,29 @@ class RouteViewModel : ViewModel() {
         } else {
             String.format("%02d:%02d", m, s)
         }
+    }
+
+    //zapisywanie czasów
+    fun saveCurrentResult(routeId: String) {
+        val currentTime = _elapsedSeconds.value
+        if (currentTime <= 0) return
+
+        val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+        val dateString = sdf.format(Date())
+        val newResult = RouteResult(currentTime, dateString)
+
+        val currentRouteResults = _savedResults.value[routeId] ?: emptyList()
+
+        val updatedMap = _savedResults.value.toMutableMap()
+        updatedMap[routeId] = currentRouteResults + newResult
+        _savedResults.value = updatedMap
+
+        resetTimer()
+    }
+
+    fun getTopResultsForRoute(routeId: String): List<RouteResult> {
+        return _savedResults.value[routeId]
+            ?.sortedBy { it.timeInSeconds }
+            ?.take(3) ?: emptyList()
     }
 }
