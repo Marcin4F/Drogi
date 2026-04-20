@@ -66,7 +66,7 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _selectedRouteId = MutableStateFlow<String?>(null)
     val selectedRouteId: StateFlow<String?> = _selectedRouteId.asStateFlow()
 
-    fun selectRouteForDetail(routeId: String) {
+    fun selectRouteForDetail(routeId: String?) {
         _selectedRouteId.value = routeId
     }
 

@@ -35,6 +35,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.compose.runtime.LaunchedEffect
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,7 +68,7 @@ class MainActivity : ComponentActivity() {
 fun AdaptiveAppScreen(viewModel: RouteViewModel) {
     // sprawdzenie szerokosci ekranu
     BoxWithConstraints {
-        if (maxWidth < 600.dp) {
+        if (this.maxWidth < 600.dp) {
             // telefon
             PhoneNavigation(viewModel)
         } else {
@@ -77,6 +82,33 @@ fun AdaptiveAppScreen(viewModel: RouteViewModel) {
 @Composable
 fun PhoneNavigation(viewModel: RouteViewModel) {
     val navController = rememberNavController()
+    val selectedRouteId by viewModel.selectedRouteId.collectAsState()
+
+    // widok tablet -> widok telefon z wybrana trasa
+    LaunchedEffect(Unit) {
+        if (selectedRouteId != null) {
+            navController.navigate("routeDetail/$selectedRouteId") {
+                popUpTo("routeList")
+            }
+        }
+    }
+
+    // zapisanie stanu
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    LaunchedEffect(navBackStackEntry) {
+        val currentRoute = navBackStackEntry?.destination?.route
+        if (currentRoute == "routeList") {
+            // powrot na liste tras
+            viewModel.selectRouteForDetail(null)
+        } else if (currentRoute?.startsWith("routeDetail") == true) {
+            // wybranie trasy
+            val routeId = navBackStackEntry?.arguments?.getString("routeId")
+            if (routeId != null) {
+                viewModel.selectRouteForDetail(routeId)
+            }
+        }
+    }
+
     NavHost(navController = navController, startDestination = "routeList") {
         composable("routeList") {
             RouteListScreen(
@@ -85,7 +117,6 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
                     navController.navigate("routeDetail/$routeId")
                 },
                 onActiveTimerClick = { activeId ->
-                    // przejscie do trasy ze stoperem
                     navController.navigate("routeDetail/$activeId")
                 }
             )
@@ -236,122 +267,124 @@ fun RouteDetailScreen(
     val isRunning by viewModel.isTimerRunning.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
     val showAllResults = remember { mutableStateOf(false) }
-    val showResetConfirmation = remember { mutableStateOf(false) }
 
-    if (showAllResults.value && route != null) {
-        AllResultsDialog(
-            routeId = route.id,
-            routeName = route.name,
-            viewModel = viewModel,
-            onDismiss = { showAllResults.value = false }
-        )
-    }
+    // BoxWithConstraints pozwoli nam sprawdzić wysokość dostępnego miejsca
+    BoxWithConstraints {
+        // Definiujemy, co uznajemy za "krótki" ekran (np. telefon w poziomie)
+        val isShortScreen = this.maxHeight < 500.dp
 
-    if (showResetConfirmation.value) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirmation.value = false },
-            title = { Text("Resetowanie stopera") },
-            text = { Text("Czy na pewno chcesz przerwać i zresetować stoper? Niezapisany czas zostanie utracony.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.resetTimer()
-                    showResetConfirmation.value = false
-                }) {
-                    Text("Zresetuj", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetConfirmation.value = false }) {
-                    Text("Anuluj")
-                }
-            }
-        )
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(route?.name ?: "Wybierz trasę z listy") },
-                navigationIcon = {
-                    if (onBackClick != null) {
-                        TextButton(onClick = onBackClick) {
-                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "Powrót")
-                        }
-                    }
-                }
+        if (showAllResults.value && route != null) {
+            AllResultsDialog(
+                routeId = route.id,
+                routeName = route.name,
+                viewModel = viewModel,
+                onDismiss = { showAllResults.value = false }
             )
-        },
-        // stoper
-        bottomBar = {
-            if (route != null) {
-                if (activeTimerId == null || activeTimerId == route.id) {
-                    Column {
-                        // tabela wyników
-                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                            BestResultsTable(
-                                routeId = route.id,
-                                viewModel = viewModel,
-                                onTableClick = { showAllResults.value = true }
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(route?.name ?: "Wybierz trasę z listy")
+                        }
+                    },
+                    navigationIcon = {
+                        if (onBackClick != null) {
+                            TextButton(onClick = onBackClick) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "Powrót")
+                            }
+                        }
+                    },
+                    // DODAJEMY IKONĘ NA PRAWO OD NAZWY (tylko na krótkich ekranach)
+                    actions = {
+                        if (isShortScreen && route != null) {
+                            IconButton(onClick = { showAllResults.value = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.TableChart, // Ikona przypominająca tabelę/ranking
+                                    contentDescription = "Pokaż wyniki",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                )
+            },
+            bottomBar = {
+                if (route != null) {
+                    if (activeTimerId == null || activeTimerId == route.id) {
+                        Column {
+                            // TABELA WYŚWIETLA SIĘ TYLKO, GDY EKRAN JEST WYSTARCZAJĄCO WYSOKI
+                            if (!isShortScreen) {
+                                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                                    BestResultsTable(
+                                        routeId = route.id,
+                                        viewModel = viewModel,
+                                        onTableClick = { showAllResults.value = true }
+                                    )
+                                }
+                            }
+
+                            StopwatchBar(
+                                elapsedTime = viewModel.formatTime(elapsedSeconds),
+                                isRunning = isRunning,
+                                hasTime = elapsedSeconds > 0,
+                                onStart = { viewModel.startTimer(route.id) },
+                                onStop = { viewModel.stopTimer() },
+                                onReset = { viewModel.resetTimer() },
+                                onSave = { viewModel.saveCurrentResult(route.id) }
                             )
                         }
-                        StopwatchBar(
-                            elapsedTime = viewModel.formatTime(elapsedSeconds),
-                            isRunning = isRunning,
-                            hasTime = elapsedSeconds > 0,
-                            onStart = { viewModel.startTimer(route.id) },
-                            onStop = { viewModel.stopTimer() },
-                            onReset = { showResetConfirmation.value = true },
-                            onSave = { viewModel.saveCurrentResult(route.id) }
-                        )
-                    }
-                } else {
-                    val activeRoute = viewModel.getRouteById(activeTimerId)
-
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onNavigateToActiveRoute(activeTimerId!!) }
-                                .navigationBarsPadding()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
+                    } else {
+                        // Baner blokady (zostaje bez zmian)
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "Działa stoper trasy: ${activeRoute?.name}.\nKliknij, aby wrócić.",
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigateToActiveRoute(activeTimerId!!) }
+                                    .navigationBarsPadding()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Działa stoper trasy: ${viewModel.getRouteById(activeTimerId)?.name}.\nKliknij, aby wrócić.",
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
-            if (route != null) {
-                Text(
-                    text = "Opis trasy",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                Text(
-                    style = MaterialTheme.typography.bodyLarge,
-                    text = route.description
-                )
-            } else if (requestedRouteId != null) {
-                Text("Wystąpił błąd podczas ładowania danych.")
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()) // Dodajemy przewijanie opisu
+            ) {
+                if (route != null) {
+                    Text(
+                        text = "Opis trasy",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Text(
+                        style = MaterialTheme.typography.bodyLarge,
+                        text = route.description
+                    )
+                } else if (requestedRouteId != null) {
+                    Text("Wystąpił błąd podczas ładowania danych.")
+                }
             }
         }
     }
