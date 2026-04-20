@@ -44,6 +44,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.saveable.rememberSaveable
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,21 +71,24 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AdaptiveAppScreen(viewModel: RouteViewModel) {
-    // sprawdzenie szerokosci ekranu
-    BoxWithConstraints {
-        if (this.maxWidth < 600.dp) {
-            // telefon
-            PhoneNavigation(viewModel)
-        } else {
-            // tablet
-            TabletSplitScreen(viewModel)
+    val hasStarted = rememberSaveable { mutableStateOf(false) }
+
+    if (!hasStarted.value) {
+        HomeScreen(onStartClick = { hasStarted.value = true })
+    } else {
+        BoxWithConstraints {
+            if (this.maxWidth < 600.dp) {
+                PhoneNavigation(viewModel, onBackToHome = { hasStarted.value = false })
+            } else {
+                TabletSplitScreen(viewModel, onBackToHome = { hasStarted.value = false })
+            }
         }
     }
 }
 
 // dla telefonow
 @Composable
-fun PhoneNavigation(viewModel: RouteViewModel) {
+fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     val navController = rememberNavController()
     val selectedRouteId by viewModel.selectedRouteId.collectAsState()
 
@@ -122,7 +126,8 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
                 },
                 onActiveTimerClick = { activeId ->
                     navController.navigate("routeDetail/$activeId")
-                }
+                },
+                onBackToHome = onBackToHome
             )
         }
         composable(
@@ -149,7 +154,7 @@ fun PhoneNavigation(viewModel: RouteViewModel) {
 
 // dla tabletow
 @Composable
-fun TabletSplitScreen(viewModel: RouteViewModel) {
+fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     // aktualnie wybrana trasa
     val selectedRouteId by viewModel.selectedRouteId.collectAsState()
     val selectedRoute = viewModel.getRouteById(selectedRouteId)
@@ -164,7 +169,8 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
                 },
                 onActiveTimerClick = { activeId ->
                     viewModel.selectRouteForDetail(activeId)
-                }
+                },
+                onBackToHome = onBackToHome
             )
         }
 
@@ -189,13 +195,68 @@ fun TabletSplitScreen(viewModel: RouteViewModel) {
     }
 }
 
-// pierwszy ekran
+// ekran glowny
+@Composable
+fun HomeScreen(onStartClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // Ikona aplikacji TODO: zmienić ikone
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ikona2),
+            contentDescription = "Logo aplikacji",
+            modifier = Modifier.size(150.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // tytul
+        Text(
+            text = "Drogi & Trasy",
+            style = MaterialTheme.typography.displayMedium,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // opis
+        Text(
+            text = "Znajdź idealną trasę dla siebie. Monitoruj swoje czasy, bij rekordy i odkrywaj nowe ścieżki biegowe oraz rowerowe w okolicy Poznania.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Button(
+            onClick = onStartClick,
+            modifier = Modifier
+                .fillMaxWidth(0.8f)
+                .height(64.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(
+                text = "Ruszajmy!",
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
+    }
+}
+
+// ekran z lista
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RouteListScreen(
     viewModel: RouteViewModel,
     onRouteClick: (String) -> Unit,
-    onActiveTimerClick: (String) -> Unit
+    onActiveTimerClick: (String) -> Unit,
+    onBackToHome: () -> Unit
 ) {
     val routes by viewModel.filteredRoutes.collectAsState()
     val selectedType by viewModel.selectedType.collectAsState()
@@ -205,7 +266,14 @@ fun RouteListScreen(
     Scaffold(
         topBar = {
             Column {
-                TopAppBar(title = { Text("Dostępne trasy") })
+                TopAppBar(title = { Text("Dostępne trasy") },
+                    navigationIcon = {
+                            TextButton(onClick = onBackToHome) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "Powrót")
+                            }
+                    })
 
                 TabRow(selectedTabIndex = if (selectedType == RouteType.RUNNING) 0 else 1) {
                     Tab(
