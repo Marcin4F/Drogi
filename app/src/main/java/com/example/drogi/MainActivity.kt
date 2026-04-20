@@ -40,6 +40,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.runtime.LaunchedEffect
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -267,10 +271,9 @@ fun RouteDetailScreen(
     val isRunning by viewModel.isTimerRunning.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
     val showAllResults = remember { mutableStateOf(false) }
+    val showResetConfirmation = remember { mutableStateOf(false) }
 
-    // BoxWithConstraints pozwoli nam sprawdzić wysokość dostępnego miejsca
     BoxWithConstraints {
-        // Definiujemy, co uznajemy za "krótki" ekran (np. telefon w poziomie)
         val isShortScreen = this.maxHeight < 500.dp
 
         if (showAllResults.value && route != null) {
@@ -279,6 +282,27 @@ fun RouteDetailScreen(
                 routeName = route.name,
                 viewModel = viewModel,
                 onDismiss = { showAllResults.value = false }
+            )
+        }
+
+        if (showResetConfirmation.value) {
+            AlertDialog(
+                onDismissRequest = { showResetConfirmation.value = false },
+                title = { Text("Resetowanie stopera") },
+                text = { Text("Czy na pewno chcesz przerwać i zresetować stoper? Niezapisany czas zostanie utracony.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.resetTimer()
+                        showResetConfirmation.value = false
+                    }) {
+                        Text("Zresetuj", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetConfirmation.value = false }) {
+                        Text("Anuluj")
+                    }
+                }
             )
         }
 
@@ -299,12 +323,11 @@ fun RouteDetailScreen(
                             }
                         }
                     },
-                    // DODAJEMY IKONĘ NA PRAWO OD NAZWY (tylko na krótkich ekranach)
                     actions = {
                         if (isShortScreen && route != null) {
                             IconButton(onClick = { showAllResults.value = true }) {
                                 Icon(
-                                    imageVector = Icons.Default.TableChart, // Ikona przypominająca tabelę/ranking
+                                    imageVector = Icons.Default.TableChart,
                                     contentDescription = "Pokaż wyniki",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
@@ -317,7 +340,6 @@ fun RouteDetailScreen(
                 if (route != null) {
                     if (activeTimerId == null || activeTimerId == route.id) {
                         Column {
-                            // TABELA WYŚWIETLA SIĘ TYLKO, GDY EKRAN JEST WYSTARCZAJĄCO WYSOKI
                             if (!isShortScreen) {
                                 Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                                     BestResultsTable(
@@ -334,12 +356,11 @@ fun RouteDetailScreen(
                                 hasTime = elapsedSeconds > 0,
                                 onStart = { viewModel.startTimer(route.id) },
                                 onStop = { viewModel.stopTimer() },
-                                onReset = { viewModel.resetTimer() },
+                                onReset = { showResetConfirmation.value = true },
                                 onSave = { viewModel.saveCurrentResult(route.id) }
                             )
                         }
                     } else {
-                        // Baner blokady (zostaje bez zmian)
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -370,7 +391,7 @@ fun RouteDetailScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(16.dp)
-                    .verticalScroll(rememberScrollState()) // Dodajemy przewijanie opisu
+                    .verticalScroll(rememberScrollState())
             ) {
                 if (route != null) {
                     Text(
@@ -382,6 +403,19 @@ fun RouteDetailScreen(
                         style = MaterialTheme.typography.bodyLarge,
                         text = route.description
                     )
+                    if (!isShortScreen && !route.imageUrl.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        AsyncImage(
+                            model = route.imageUrl,
+                            contentDescription = "Zdjęcie przedstawiające trasę: ${route.name}",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 } else if (requestedRouteId != null) {
                     Text("Wystąpił błąd podczas ładowania danych.")
                 }

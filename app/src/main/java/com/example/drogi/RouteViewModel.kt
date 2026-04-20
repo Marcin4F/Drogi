@@ -18,7 +18,8 @@ data class Route(
     val id: String,
     val name: String,
     val description: String,
-    val type: RouteType)
+    val type: RouteType,
+    val imageUrl: String? = null)
 
 class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _allRoutes = MutableStateFlow<List<Route>>(emptyList())
