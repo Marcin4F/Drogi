@@ -23,6 +23,7 @@ data class Route(
 
 class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _allRoutes = MutableStateFlow<List<Route>>(emptyList())
+    val allRoutes: StateFlow<List<Route>> = _allRoutes.asStateFlow()
     private val _selectedType = MutableStateFlow(RouteType.RUNNING)
     val selectedType: StateFlow<RouteType> = _selectedType.asStateFlow()
 

@@ -48,6 +48,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -278,36 +284,43 @@ fun RouteListScreen(
     onActiveTimerClick: (String) -> Unit,
     onBackToHome: () -> Unit
 ) {
-    val routes by viewModel.filteredRoutes.collectAsState()
-    val selectedType by viewModel.selectedType.collectAsState()
+    val allRoutes by viewModel.allRoutes.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
+    val pagerState = rememberPagerState(pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             Column {
-                TopAppBar(title = { Text("Dostępne trasy") },
+                TopAppBar(
+                    title = { Text("Dostępne trasy") },
                     navigationIcon = {
-                            TextButton(onClick = onBackToHome) {
-                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = "Powrót")
-                            }
+                        TextButton(onClick = onBackToHome) {
+                            Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Powrót")
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "Powrót")
+                        }
                     },
                     actions = {
                         val isDark by viewModel.isDarkTheme.collectAsState()
                         ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
-                    })
+                    }
+                )
 
-                TabRow(selectedTabIndex = if (selectedType == RouteType.RUNNING) 0 else 1) {
+                TabRow(selectedTabIndex = pagerState.currentPage) {
                     Tab(
-                        selected = selectedType == RouteType.RUNNING,
-                        onClick = { viewModel.selectType(RouteType.RUNNING) },
+                        selected = pagerState.currentPage == 0,
+                        onClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                        },
                         text = { Text("Biegowe") }
                     )
                     Tab(
-                        selected = selectedType == RouteType.CYCLING,
-                        onClick = { viewModel.selectType(RouteType.CYCLING) },
+                        selected = pagerState.currentPage == 1,
+                        onClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                        },
                         text = { Text("Rowerowe") }
                     )
                 }
@@ -324,25 +337,36 @@ fun RouteListScreen(
             }
         }
     ) { paddingValues ->
-        LazyColumn(
+        // aby moc przesowac kolumny przeciagnieciem
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp)
-        ) {
-            items(routes) { route ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                        .clickable { onRouteClick(route.id) },
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Text(
-                        text = route.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(16.dp)
-                    )
+        ) { page ->
+            // filtorwanie rodzaju trasy
+            val pageType = if (page == 0) RouteType.RUNNING else RouteType.CYCLING
+            val pageRoutes = allRoutes.filter { it.type == pageType }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+            ) {
+                items(pageRoutes) { route ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .clickable { onRouteClick(route.id) },
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Text(
+                            text = route.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -364,8 +388,25 @@ fun RouteDetailScreen(
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
     val showAllResults = remember { mutableStateOf(false) }
     val showResetConfirmation = remember { mutableStateOf(false) }
+    var hasTriggeredBack = remember { mutableStateOf(false) }
+    val swipeBackModifier = if (onBackClick != null) {
+        Modifier.pointerInput(Unit) {
+            detectHorizontalDragGestures(
+                onDragEnd = { hasTriggeredBack.value = false },
+                onDragCancel = { hasTriggeredBack.value = false }
+            ) { change, dragAmount ->
+                if (dragAmount > 20 && !hasTriggeredBack.value) {
+                    hasTriggeredBack.value = true
+                    onBackClick.invoke()
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
 
-    BoxWithConstraints {
+
+    BoxWithConstraints(modifier = swipeBackModifier) {
         val isShortScreen = this.maxHeight < 500.dp
 
         if (showAllResults.value && route != null) {
