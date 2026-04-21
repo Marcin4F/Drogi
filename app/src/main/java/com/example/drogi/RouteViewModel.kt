@@ -29,6 +29,9 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _filteredRoutes = MutableStateFlow<List<Route>>(emptyList())
     val filteredRoutes: StateFlow<List<Route>> = _filteredRoutes.asStateFlow()
 
+    private val _isDarkTheme = MutableStateFlow(false) // Domyślnie jasny
+    val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
+
     init {
         loadRoutes()
     }
@@ -43,7 +46,6 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                // TODO: zmienic na baze danych
                 _allRoutes.value = emptyList()
                 updateFilteredList()
             }
@@ -158,6 +160,11 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
         viewModelScope.launch {
             dao.deleteResult(result)
         }
+    }
+
+    // zmiana motywu aplikacji
+    fun toggleTheme() {
+        _isDarkTheme.value = !_isDarkTheme.value
     }
 }
 

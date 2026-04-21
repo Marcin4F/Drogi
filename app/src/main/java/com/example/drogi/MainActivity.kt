@@ -45,23 +45,28 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.ui.graphics.Color
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            DrogiTheme {
+            // baza danych
+            val db = AppDatabase.getDatabase(applicationContext)
+            val viewModel: RouteViewModel = viewModel(
+                factory = RouteViewModelFactory(db.routeResultDao())
+            )
+            // motyw
+            val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+            DrogiTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // inicjalizacaj bazy
-                    val db = AppDatabase.getDatabase(applicationContext)
-
-                    val viewModel: RouteViewModel = viewModel(
-                        factory = RouteViewModelFactory(db.routeResultDao())
-                    )
                     AdaptiveAppScreen(viewModel = viewModel)
                 }
             }
@@ -72,9 +77,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AdaptiveAppScreen(viewModel: RouteViewModel) {
     val hasStarted = rememberSaveable { mutableStateOf(false) }
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
 
     if (!hasStarted.value) {
-        HomeScreen(onStartClick = { hasStarted.value = true })
+        HomeScreen(
+            isDarkTheme = isDarkTheme,
+            onToggleTheme = { viewModel.toggleTheme() },
+            onStartClick = { hasStarted.value = true }
+        )
     } else {
         BoxWithConstraints {
             if (this.maxWidth < 600.dp) {
@@ -197,54 +207,64 @@ fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
 
 // ekran glowny
 @Composable
-fun HomeScreen(onStartClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        // Ikona aplikacji TODO: zmienić ikone
-        androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ikona_beztla),
-            contentDescription = "Logo aplikacji",
-            modifier = Modifier.size(150.dp)
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // tytul
-        Text(
-            text = "Drogi & Trasy",
-            style = MaterialTheme.typography.displayMedium,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // opis
-        Text(
-            text = "Znajdź idealną trasę dla siebie. Monitoruj swoje czasy, bij rekordy i odkrywaj nowe ścieżki biegowe oraz rowerowe w okolicy Poznania.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(48.dp))
-
-        Button(
-            onClick = onStartClick,
+fun HomeScreen(isDarkTheme: Boolean, onToggleTheme: () -> Unit, onStartClick: () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth(0.8f)
-                .height(64.dp),
-            shape = RoundedCornerShape(16.dp)
+                .statusBarsPadding()
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
         ) {
-            Text(
-                text = "Ruszajmy!",
-                style = MaterialTheme.typography.titleLarge
+            ThemeToggleIcon(isDarkTheme = isDarkTheme, onToggle = onToggleTheme)
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id = R.drawable.ikona_beztla),
+                contentDescription = "Logo aplikacji",
+                modifier = Modifier.size(150.dp)
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // tytul
+            Text(
+                text = "Drogi & Trasy",
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // opis
+            Text(
+                text = "Znajdź idealną trasę dla siebie. Monitoruj swoje czasy, bij rekordy i odkrywaj nowe ścieżki biegowe oraz rowerowe w okolicy Poznania.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            Button(
+                onClick = onStartClick,
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .height(64.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text(
+                    text = "Ruszajmy!",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
         }
     }
 }
@@ -273,6 +293,10 @@ fun RouteListScreen(
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(text = "Powrót")
                             }
+                    },
+                    actions = {
+                        val isDark by viewModel.isDarkTheme.collectAsState()
+                        ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
                     })
 
                 TabRow(selectedTabIndex = if (selectedType == RouteType.RUNNING) 0 else 1) {
@@ -392,6 +416,10 @@ fun RouteDetailScreen(
                         }
                     },
                     actions = {
+                        val isDark by viewModel.isDarkTheme.collectAsState()
+                        ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
+
+                        // ikona z tabela wynikow
                         if (isShortScreen && route != null) {
                             IconButton(onClick = { showAllResults.value = true }) {
                                 Icon(
@@ -672,4 +700,24 @@ fun AllResultsDialog(
 fun formatTimestamp(timestamp: Long, pattern: String): String {
     val sdf = SimpleDateFormat(pattern, Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+// zmiana motywu
+@Composable
+fun ThemeToggleIcon(isDarkTheme: Boolean, onToggle: () -> Unit) {
+    IconButton(onClick = onToggle) {
+        if (isDarkTheme) {
+            Icon(
+                imageVector = Icons.Default.LightMode,
+                contentDescription = "Jasny motyw",
+                tint = Color(0xFFFFD700)
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.DarkMode,
+                contentDescription = "Ciemny motyw",
+                tint = Color(0xFF1A237E)
+            )
+        }
+    }
 }
