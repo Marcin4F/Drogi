@@ -207,7 +207,7 @@ fun HomeScreen(onStartClick: () -> Unit) {
     ) {
         // Ikona aplikacji TODO: zmienić ikone
         androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ikona2),
+            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ikona_beztla),
             contentDescription = "Logo aplikacji",
             modifier = Modifier.size(150.dp)
         )
