@@ -33,22 +33,33 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _isDarkTheme = MutableStateFlow(false) // Domyślnie jasny
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _isError = MutableStateFlow(false)
+    val isError: StateFlow<Boolean> = _isError.asStateFlow()
+
     init {
         loadRoutes()
     }
 
-    private fun loadRoutes() {
-        // uruchomienie w tle
+    fun loadRoutes() {
         viewModelScope.launch {
+            _isLoading.value = true
+            _isError.value = false
+            // z obslugą błędu API
             try {
                 val downloadedRoutes = RetrofitClient.apiService.getRoutes()
                 _allRoutes.value = downloadedRoutes
                 updateFilteredList()
-
+                _isError.value = false
             } catch (e: Exception) {
                 e.printStackTrace()
+                _isError.value = true
                 _allRoutes.value = emptyList()
                 updateFilteredList()
+            } finally {
+                _isLoading.value = false
             }
         }
     }

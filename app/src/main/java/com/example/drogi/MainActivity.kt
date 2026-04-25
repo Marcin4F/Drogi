@@ -54,6 +54,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Box
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -289,6 +291,8 @@ fun RouteListScreen(
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val pagerState = rememberPagerState(pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val isError by viewModel.isError.collectAsState()
 
     Scaffold(
         topBar = {
@@ -337,35 +341,63 @@ fun RouteListScreen(
             }
         }
     ) { paddingValues ->
-        // aby moc przesowac kolumny przeciagnieciem
-        HorizontalPager(
-            state = pagerState,
+        // sprawdzanie stanu pobrania danych z API
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-        ) { page ->
-            // filtorwanie rodzaju trasy
-            val pageType = if (page == 0) RouteType.RUNNING else RouteType.CYCLING
-            val pageRoutes = allRoutes.filter { it.type == pageType }
+                .padding(paddingValues),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isLoading) {
+                // kręcące się kółko ładowania
+                CircularProgressIndicator()
+            } else if (isError && allRoutes.isEmpty()) {
+                // błąd i brak tras do pokazania
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = "Błąd pobrania tras.\nSprawdź połączenie z internetem.",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = { viewModel.loadRoutes() }) {
+                        Text("Spróbuj ponownie")
+                    }
+                }
+            } else {
+                // aby móc przesówać kolumny przeciągnięciem
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    // filtorwanie rodzaju trasy
+                    val pageType = if (page == 0) RouteType.RUNNING else RouteType.CYCLING
+                    val pageRoutes = allRoutes.filter { it.type == pageType }
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-            ) {
-                items(pageRoutes) { route ->
-                    Card(
+                    LazyColumn(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                            .clickable { onRouteClick(route.id) },
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp)
                     ) {
-                        Text(
-                            text = route.name,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        items(pageRoutes) { route ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                                    .clickable { onRouteClick(route.id) },
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Text(
+                                    text = route.name,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
