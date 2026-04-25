@@ -56,6 +56,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -289,10 +291,11 @@ fun RouteListScreen(
     val allRoutes by viewModel.allRoutes.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
     val isLoading by viewModel.isLoading.collectAsState()
     val isError by viewModel.isError.collectAsState()
+    val favoriteIds by viewModel.favoriteIds.collectAsState()
 
     Scaffold(
         topBar = {
@@ -326,6 +329,11 @@ fun RouteListScreen(
                             coroutineScope.launch { pagerState.animateScrollToPage(1) }
                         },
                         text = { Text("Rowerowe") }
+                    )
+                    Tab(
+                        selected = pagerState.currentPage == 2,
+                        onClick = { coroutineScope.launch { pagerState.animateScrollToPage(2) } },
+                        text = { Text("Ulubione") }
                     )
                 }
             }
@@ -374,28 +382,42 @@ fun RouteListScreen(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
-                    // filtorwanie rodzaju trasy
-                    val pageType = if (page == 0) RouteType.RUNNING else RouteType.CYCLING
-                    val pageRoutes = allRoutes.filter { it.type == pageType }
+                    val pageRoutes = when (page) {
+                        0 -> allRoutes.filter { it.type == RouteType.RUNNING }
+                        1 -> allRoutes.filter { it.type == RouteType.CYCLING }
+                        else -> allRoutes.filter { favoriteIds.contains(it.id) }
+                    }
 
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp)
-                    ) {
-                        items(pageRoutes) { route ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp)
-                                    .clickable { onRouteClick(route.id) },
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
-                                Text(
-                                    text = route.name,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    modifier = Modifier.padding(16.dp)
-                                )
+                    if (page == 2 && pageRoutes.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Nie masz jeszcze ulubionych tras",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp)
+                        ) {
+                            items(pageRoutes) { route ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .clickable { onRouteClick(route.id) },
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Text(
+                                        text = route.name,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -490,6 +512,20 @@ fun RouteDetailScreen(
                     },
                     actions = {
                         val isDark by viewModel.isDarkTheme.collectAsState()
+                        val favorites by viewModel.favoriteIds.collectAsState()
+                        val isFavorite = favorites.contains(route?.id)
+
+                        // gwiazdka do dodwania do ulubionych
+                        if (route != null) {
+                            IconButton(onClick = { viewModel.toggleFavorite(route.id) }) {
+                                Icon(
+                                    imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = "Ulubione",
+                                    tint = Color(0xFFFFD700)
+                                )
+                            }
+                        }
+
                         ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
 
                         // ikona z tabela wynikow

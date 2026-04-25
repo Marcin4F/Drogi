@@ -30,17 +30,42 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _filteredRoutes = MutableStateFlow<List<Route>>(emptyList())
     val filteredRoutes: StateFlow<List<Route>> = _filteredRoutes.asStateFlow()
 
+    // ---- motywy ----
     private val _isDarkTheme = MutableStateFlow(false) // Domyślnie jasny
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
+
+    // ---- ładowanie API ----
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _isError = MutableStateFlow(false)
     val isError: StateFlow<Boolean> = _isError.asStateFlow()
 
+    // ---- ulubione trasy ----
+    private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
+    val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
+
+    // ---- stoper ----
+    private val _elapsedSeconds = MutableStateFlow(0L)
+    val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
+
+    private val _activeTimerRouteId = MutableStateFlow<String?>(null)
+    val activeTimerRouteId: StateFlow<String?> = _activeTimerRouteId.asStateFlow()
+
+    private val _isTimerRunning = MutableStateFlow(false)
+    val isTimerRunning: StateFlow<Boolean> = _isTimerRunning.asStateFlow()
+
+    private var timerJob: Job? = null
+
     init {
         loadRoutes()
+
+        viewModelScope.launch {
+            dao.getAllFavoriteIds().collect { ids ->
+                _favoriteIds.value = ids.toSet()
+            }
+        }
     }
 
     fun loadRoutes() {
@@ -85,18 +110,7 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
         _selectedRouteId.value = routeId
     }
 
-    // stoper
-    private val _elapsedSeconds = MutableStateFlow(0L)
-    val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
-
-    private val _activeTimerRouteId = MutableStateFlow<String?>(null)
-    val activeTimerRouteId: StateFlow<String?> = _activeTimerRouteId.asStateFlow()
-
-    private val _isTimerRunning = MutableStateFlow(false)
-    val isTimerRunning: StateFlow<Boolean> = _isTimerRunning.asStateFlow()
-
-    private var timerJob: Job? = null
-
+    // ---- stoper ----
     fun startTimer(routeId: String) {
         if (_activeTimerRouteId.value == null) {
             _activeTimerRouteId.value = routeId
@@ -130,7 +144,7 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
         _activeTimerRouteId.value = null
     }
 
-    // formatowanie czasu
+    // ---- formatowanie czasu ----
     fun formatTime(seconds: Long): String {
         val h = seconds / 3600
         val m = (seconds % 3600) / 60
@@ -143,7 +157,7 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
         }
     }
 
-    // baza danych
+    // ---- baza danych z czasami ----
     fun saveCurrentResult(routeId: String) {
         val currentTime = _elapsedSeconds.value
         if (currentTime <= 0) return
@@ -174,9 +188,20 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
         }
     }
 
-    // zmiana motywu aplikacji
+    // ---- zmiana motywu aplikacji ----
     fun toggleTheme() {
         _isDarkTheme.value = !_isDarkTheme.value
+    }
+
+    // ---- baza danych z ulubionymi ----
+    fun toggleFavorite(routeId: String) {
+        viewModelScope.launch {
+            if (_favoriteIds.value.contains(routeId)) {
+                dao.removeFavorite(FavoriteEntity(routeId))
+            } else {
+                dao.addFavorite(FavoriteEntity(routeId))
+            }
+        }
     }
 }
 
