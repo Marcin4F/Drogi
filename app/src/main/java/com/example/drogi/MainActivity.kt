@@ -409,14 +409,39 @@ fun RouteListScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
+                                        .height(100.dp)
                                         .clickable { onRouteClick(route.id) },
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                 ) {
-                                    Text(
-                                        text = route.name,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        modifier = Modifier.padding(16.dp)
-                                    )
+                                    Box(modifier = Modifier.fillMaxSize()) {
+
+                                        // zdjęcie w tle
+                                        if (!route.imageUrl.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = route.imageUrl,
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize(),
+                                                alpha = 0.5f
+                                            )
+                                        }
+
+                                        // tekst
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            Text(
+                                                text = route.name,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                // cień pod tekstem
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
