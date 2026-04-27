@@ -230,6 +230,11 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     fun setShowResults(show: Boolean) {
         _isShowingResults.value = show
     }
+
+    fun getAverageTime(results: List<RouteResultEntity>): Long {
+        if (results.isEmpty()) return 0L
+        return results.map { it.timeInSeconds }.average().toLong()
+    }
 }
 
 class RouteViewModelFactory(private val dao: RouteResultDao) : ViewModelProvider.Factory {

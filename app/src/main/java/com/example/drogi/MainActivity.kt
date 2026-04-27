@@ -882,6 +882,21 @@ fun RouteResultsScreen(
     val sortType by viewModel.sortType.collectAsState()
     val sortOrder by viewModel.sortOrder.collectAsState()
     val showDeleteConfirm = remember { mutableStateOf<RouteResultEntity?>(null) }
+    val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+
+    // powrót do ekrany szczegółów poprzez przeciągnięcie
+    val hasTriggeredBack = remember { mutableStateOf(false) }
+    val swipeBackModifier = Modifier.pointerInput(Unit) {
+        detectHorizontalDragGestures(
+            onDragEnd = { hasTriggeredBack.value = false },
+            onDragCancel = { hasTriggeredBack.value = false }
+        ) { change, dragAmount ->
+            if (dragAmount > 20 && !hasTriggeredBack.value) {
+                hasTriggeredBack.value = true
+                onBackClick()
+            }
+        }
+    }
 
     // logika sortowania
     val sortedResults = remember(results, sortType, sortOrder) {
@@ -909,43 +924,105 @@ fun RouteResultsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Wyniki: ${route?.name}") },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Powrót")
+    Box(modifier = swipeBackModifier)
+    {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Wyniki: ${route?.name}") },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Powrót")
+                        }
+                    },
+
+                    actions = {
+                        ThemeToggleIcon(
+                            isDarkTheme = isDarkTheme,
+                            onToggle = { viewModel.toggleTheme() }
+                        )
+                    }
+                )
+            }
+        ) { padding ->
+            Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+                // statystyki
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        label = "Najlepszy czas",
+                        value = if (results.isNotEmpty()) viewModel.formatTime(results.minOf { it.timeInSeconds }) else "--",
+                        Modifier.weight(1f)
+                    )
+                    StatCard(
+                        label = "Średni",
+                        value = if (results.isNotEmpty()) viewModel.formatTime(viewModel.getAverageTime(results)) else "--",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        label = "Ilość",
+                        value = results.size.toString(),
+                        Modifier.weight(1f)
+                    )
+                }
+
+                // nagłówek z sortowaniem
+                Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        SortHeaderItem(
+                            "Czas",
+                            ResultSortType.TIME,
+                            sortType,
+                            sortOrder,
+                            Modifier.weight(1f)
+                        ) { viewModel.toggleSort(it) }
+                        SortHeaderItem(
+                            "Data",
+                            ResultSortType.DATE,
+                            sortType,
+                            sortOrder,
+                            Modifier.weight(1f)
+                        ) { viewModel.toggleSort(it) }
+                        Spacer(modifier = Modifier.width(48.dp)) // Miejsce na ikonę usuwania
                     }
                 }
-            )
-        }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // statystyki
-            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(label = "Najlepszy czas", value = if (results.isNotEmpty()) viewModel.formatTime(results.minOf { it.timeInSeconds }) else "--", Modifier.weight(1f))
-                StatCard(label = "Liczba biegów", value = results.size.toString(), Modifier.weight(1f))
-            }
 
-            // nagłówek z sortowaniem
-            Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SortHeaderItem("Czas", ResultSortType.TIME, sortType, sortOrder, Modifier.weight(1f)) { viewModel.toggleSort(it) }
-                    SortHeaderItem("Data", ResultSortType.DATE, sortType, sortOrder, Modifier.weight(1f)) { viewModel.toggleSort(it) }
-                    Spacer(modifier = Modifier.width(48.dp)) // Miejsce na ikonę usuwania
-                }
-            }
-
-            // dane
-            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(sortedResults) { result ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(viewModel.formatTime(result.timeInSeconds), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                            Text(formatTimestamp(result.timestamp, "dd.MM.yyyy HH:mm"), Modifier.weight(1f), textAlign = TextAlign.Center)
-                            IconButton(onClick = { showDeleteConfirm.value = result }) {
-                                Icon(Icons.Default.Delete, "Usuń", tint = MaterialTheme.colorScheme.error)
+                // dane
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(sortedResults) { result ->
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    viewModel.formatTime(result.timeInSeconds),
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                )
+                                Text(
+                                    formatTimestamp(result.timestamp, "dd.MM.yyyy HH:mm"),
+                                    Modifier.weight(1f),
+                                    textAlign = TextAlign.Center
+                                )
+                                IconButton(onClick = { showDeleteConfirm.value = result }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        "Usuń",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         }
                     }
@@ -957,10 +1034,28 @@ fun RouteResultsScreen(
 
 @Composable
 fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
