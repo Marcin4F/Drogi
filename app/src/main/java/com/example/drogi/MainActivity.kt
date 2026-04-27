@@ -56,6 +56,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Search
@@ -140,6 +142,7 @@ fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     }
 
     NavHost(navController = navController, startDestination = "routeList") {
+        // lista tras
         composable("routeList") {
             RouteListScreen(
                 viewModel = viewModel,
@@ -152,6 +155,8 @@ fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
                 onBackToHome = onBackToHome
             )
         }
+
+        // ekran szczegółów trasy
         composable(
             route = "routeDetail/{routeId}",
             arguments = listOf(navArgument("routeId") { type = NavType.StringType })
@@ -168,7 +173,25 @@ fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
                     navController.navigate("routeDetail/$activeId") {
                         popUpTo("routeList")
                     }
+                },
+                onNavigateToResults = { id ->
+                    navController.navigate("routeResults/$id")
                 }
+            )
+        }
+
+        // ekrna wyników na danej trasie
+        composable(
+            route = "routeResults/{routeId}",
+            arguments = listOf(navArgument("routeId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val routeId = backStackEntry.arguments?.getString("routeId")
+            val route = viewModel.getRouteById(routeId)
+
+            RouteResultsScreen(
+                route = route,
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
             )
         }
     }
@@ -211,7 +234,8 @@ fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
                 onBackClick = null, // ukrycie przycisku powrotu
                 onNavigateToActiveRoute = { activeId ->
                     viewModel.selectRouteForDetail(activeId)
-                }
+                },
+                onNavigateToResults = {}
             )
         }
     }
@@ -496,7 +520,8 @@ fun RouteDetailScreen(
     requestedRouteId: String?,
     viewModel: RouteViewModel,
     onBackClick: (() -> Unit)? = null,
-    onNavigateToActiveRoute: (String) -> Unit
+    onNavigateToActiveRoute: (String) -> Unit,
+    onNavigateToResults: (String) -> Unit
 ) {
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val isRunning by viewModel.isTimerRunning.collectAsState()
@@ -523,15 +548,6 @@ fun RouteDetailScreen(
 
     BoxWithConstraints(modifier = swipeBackModifier) {
         val isShortScreen = this.maxHeight < 500.dp
-
-        if (showAllResults.value && route != null) {
-            AllResultsDialog(
-                routeId = route.id,
-                routeName = route.name,
-                viewModel = viewModel,
-                onDismiss = { showAllResults.value = false }
-            )
-        }
 
         if (showResetConfirmation.value) {
             AlertDialog(
@@ -611,7 +627,7 @@ fun RouteDetailScreen(
                                     BestResultsTable(
                                         routeId = route.id,
                                         viewModel = viewModel,
-                                        onTableClick = { showAllResults.value = true }
+                                        onTableClick = { onNavigateToResults(route.id) }
                                     )
                                 }
                             }
@@ -819,54 +835,6 @@ fun BestResultsTable(
     }
 }
 
-@Composable
-fun AllResultsDialog(
-    routeId: String,
-    routeName: String,
-    viewModel: RouteViewModel,
-    onDismiss: () -> Unit
-) {
-    val allResults by viewModel.getAllResultsForRoute(routeId).collectAsState(initial = emptyList())
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Wszystkie czasy: $routeName") },
-        text = {
-            LazyColumn {
-                items(allResults) { result ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = viewModel.formatTime(result.timeInSeconds),
-                            modifier = Modifier.weight(1f),
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                        )
-                        Text(
-                            text = formatTimestamp(result.timestamp, "dd.MM.yyyy HH:mm"),
-                            modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Center
-                        )
-                        // przycisk usuwania
-                        IconButton(onClick = { viewModel.deleteResult(result) }) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Usuń wynik",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Zamknij") } }
-    )
-}
-
 fun formatTimestamp(timestamp: Long, pattern: String): String {
     val sdf = SimpleDateFormat(pattern, Locale.getDefault())
     return sdf.format(Date(timestamp))
@@ -887,6 +855,121 @@ fun ThemeToggleIcon(isDarkTheme: Boolean, onToggle: () -> Unit) {
                 imageVector = Icons.Default.DarkMode,
                 contentDescription = "Ciemny motyw",
                 tint = Color(0xFF1A237E)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RouteResultsScreen(
+    route: Route?,
+    viewModel: RouteViewModel,
+    onBackClick: () -> Unit
+) {
+    val results by viewModel.getAllResultsForRoute(route?.id ?: "").collectAsState(initial = emptyList())
+    val sortType by viewModel.sortType.collectAsState()
+    val sortOrder by viewModel.sortOrder.collectAsState()
+    val showDeleteConfirm = remember { mutableStateOf<RouteResultEntity?>(null) }
+
+    // Logika sortowania listy w pamięci (UI)
+    val sortedResults = remember(results, sortType, sortOrder) {
+        when (sortType) {
+            ResultSortType.TIME -> if (sortOrder == ResultSortOrder.ASC) results.sortedBy { it.timeInSeconds } else results.sortedByDescending { it.timeInSeconds }
+            ResultSortType.DATE -> if (sortOrder == ResultSortOrder.ASC) results.sortedBy { it.timestamp } else results.sortedByDescending { it.timestamp }
+        }
+    }
+
+    // Dialog potwierdzenia usunięcia (identyczny jak przy resecie)
+    if (showDeleteConfirm.value != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm.value = null },
+            title = { Text("Usunąć wynik?") },
+            text = { Text("Czy na pewno chcesz trwale usunąć ten czas? Tej operacji nie można cofnąć.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteResult(showDeleteConfirm.value!!)
+                    showDeleteConfirm.value = null
+                }) { Text("Usuń", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm.value = null }) { Text("Anuluj") }
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Wyniki: ${route?.name}") },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Powrót")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            // 1. KAFELKI STATYSTYK
+            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard(label = "Najlepszy czas", value = if (results.isNotEmpty()) viewModel.formatTime(results.minOf { it.timeInSeconds }) else "--", Modifier.weight(1f))
+                StatCard(label = "Liczba biegów", value = results.size.toString(), Modifier.weight(1f))
+            }
+
+            // 2. NAGŁÓWEK SORTOWANIA
+            Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SortHeaderItem("Czas", ResultSortType.TIME, sortType, sortOrder, Modifier.weight(1f)) { viewModel.toggleSort(it) }
+                    SortHeaderItem("Data", ResultSortType.DATE, sortType, sortOrder, Modifier.weight(1f)) { viewModel.toggleSort(it) }
+                    Spacer(modifier = Modifier.width(48.dp)) // Miejsce na ikonę usuwania
+                }
+            }
+
+            // 3. LISTA WYNIKÓW (duże karty)
+            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(sortedResults) { result ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(viewModel.formatTime(result.timeInSeconds), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Text(formatTimestamp(result.timestamp, "dd.MM.yyyy HH:mm"), Modifier.weight(1f), textAlign = TextAlign.Center)
+                            IconButton(onClick = { showDeleteConfirm.value = result }) {
+                                Icon(Icons.Default.Delete, "Usuń", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+fun SortHeaderItem(
+    label: String,
+    type: ResultSortType,
+    currentType: ResultSortType,
+    order: ResultSortOrder,
+    modifier: Modifier = Modifier,
+    onClick: (ResultSortType) -> Unit
+) {
+    Row(modifier = modifier.clickable { onClick(type) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+        Text(label, style = MaterialTheme.typography.titleSmall)
+        if (currentType == type) {
+            Icon(
+                imageVector = if (order == ResultSortOrder.ASC) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }

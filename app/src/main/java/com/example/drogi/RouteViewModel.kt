@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.Flow
 
 enum class RouteType { RUNNING, CYCLING }
 
+// do sortowań
+enum class ResultSortType { TIME, DATE }
+enum class ResultSortOrder { ASC, DESC }
+
 data class Route(
     val id: String,
     val name: String,
@@ -61,6 +65,13 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     // ---- wyszukiwanie ----
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    // ---- sortowanie wyników na danej trasie ----
+    private val _sortType = MutableStateFlow(ResultSortType.TIME)
+    val sortType = _sortType.asStateFlow()
+
+    private val _sortOrder = MutableStateFlow(ResultSortOrder.ASC)
+    val sortOrder = _sortOrder.asStateFlow()
 
     // ---- funkcje ----
     init {
@@ -212,6 +223,18 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     // ---- wyszukiwanie ----
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    // ---- sortowanie wyników na danej trasie ----
+    fun toggleSort(type: ResultSortType) {
+        if (_sortType.value == type) {
+            // zmiana kierunku sortowania
+            _sortOrder.value = if (_sortOrder.value == ResultSortOrder.ASC) ResultSortOrder.DESC else ResultSortOrder.ASC
+        } else {
+            // sortowanie (domyślnie rosnąco) według nowego parametru
+            _sortType.value = type
+            _sortOrder.value = ResultSortOrder.ASC
+        }
     }
 }
 
