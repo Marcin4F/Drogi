@@ -63,6 +63,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.automirrored.filled.DirectionsBike
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,10 +97,17 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AdaptiveAppScreen(viewModel: RouteViewModel) {
+    // ekran ładowania
+    val showSplash = rememberSaveable { mutableStateOf(true) }
+    // ekran powitalny
     val hasStarted = rememberSaveable { mutableStateOf(false) }
+
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
 
-    if (!hasStarted.value) {
+    // logika przełączania ekranó
+    if (showSplash.value) {
+        SplashScreen(onTimeout = { showSplash.value = false })
+    } else if (!hasStarted.value) {
         HomeScreen(
             isDarkTheme = isDarkTheme,
             onToggleTheme = { viewModel.toggleTheme() },
@@ -959,7 +972,7 @@ fun RouteResultsScreen(
                         Modifier.weight(1f)
                     )
                     StatCard(
-                        label = "Średni",
+                        label = "Średni czas",
                         value = if (results.isNotEmpty()) viewModel.formatTime(viewModel.getAverageTime(results)) else "--",
                         modifier = Modifier.weight(1f)
                     )
@@ -973,24 +986,30 @@ fun RouteResultsScreen(
                 // nagłówek z sortowaniem
                 Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(horizontal = 50.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Czas do lewej strony
                         SortHeaderItem(
-                            "Czas",
-                            ResultSortType.TIME,
-                            sortType,
-                            sortOrder,
-                            Modifier.weight(1f)
+                            label = "Czas",
+                            type = ResultSortType.TIME,
+                            currentType = sortType,
+                            order = sortOrder,
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.Start
                         ) { viewModel.toggleSort(it) }
+
+                        // Data wyśrodkowana
                         SortHeaderItem(
-                            "Data",
-                            ResultSortType.DATE,
-                            sortType,
-                            sortOrder,
-                            Modifier.weight(1f)
+                            label = "Data",
+                            type = ResultSortType.DATE,
+                            currentType = sortType,
+                            order = sortOrder,
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.Center
                         ) { viewModel.toggleSort(it) }
-                        Spacer(modifier = Modifier.width(48.dp)) // Miejsce na ikonę usuwania
+
+                        Spacer(modifier = Modifier.width(48.dp))
                     }
                 }
 
@@ -1007,7 +1026,7 @@ fun RouteResultsScreen(
                             ) {
                                 Text(
                                     viewModel.formatTime(result.timeInSeconds),
-                                    Modifier.weight(1f),
+                                    Modifier.weight(1f).padding(start = 20.dp),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                 )
@@ -1067,15 +1086,83 @@ fun SortHeaderItem(
     currentType: ResultSortType,
     order: ResultSortOrder,
     modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
     onClick: (ResultSortType) -> Unit
 ) {
-    Row(modifier = modifier.clickable { onClick(type) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+    Row(
+        modifier = modifier
+            .clickable { onClick(type) }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = horizontalArrangement
+    ) {
         Text(label, style = MaterialTheme.typography.titleSmall)
-        if (currentType == type) {
+
+        Icon(
+            imageVector = if (currentType == type && order == ResultSortOrder.DESC)
+                Icons.Default.ArrowDropDown
+            else
+                Icons.Default.ArrowDropUp,
+            contentDescription = null,
+            // przeźroczysta ikona
+            tint = if (currentType == type) MaterialTheme.colorScheme.primary else Color.Transparent
+        )
+    }
+}
+
+@Composable
+fun SplashScreen(onTimeout: () -> Unit) {
+    // animowane 2 właściwości
+    val offsetX = remember { Animatable(-300f) } // rower poza ekranem
+    val alpha = remember { Animatable(0f) }      // przeźroczysty tekst
+
+    // uruchomienie animacji
+    LaunchedEffect(Unit) {
+        launch {
+            // wjazd roweru
+            offsetX.animateTo(
+                targetValue = 0f, // zatrzymanie na środku
+                animationSpec = tween(durationMillis = 1200)
+            )
+        }
+        launch {
+            // pojawianie się tekstu
+            alpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 1500)
+            )
+        }
+
+        delay(1800)
+        onTimeout()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // rower
             Icon(
-                imageVector = if (order == ResultSortOrder.ASC) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                contentDescription = null,
+                imageVector = Icons.AutoMirrored.Filled.DirectionsBike,
+                contentDescription = "Rower",
+                modifier = Modifier
+                    .size(120.dp)
+                    .offset(x = offsetX.value.dp), // podpięcie animowanej właściwości
                 tint = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // tekst
+            Text(
+                text = "Drogi & Trasy",
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.alpha(alpha.value) // podpięcie animowanej właściwości
             )
         }
     }
