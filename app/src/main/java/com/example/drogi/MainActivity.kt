@@ -27,7 +27,6 @@ import com.example.drogi.ui.theme.DrogiTheme
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Stop
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,6 +61,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Replay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -738,7 +739,10 @@ fun StopwatchBar(
                 if (!isRunning) {
                     if (hasTime) {
                         Button(onClick = onSave) {
-                            Text("Zapisz")
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Zapisz"
+                            )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                     }
@@ -758,8 +762,8 @@ fun StopwatchBar(
                 Spacer(modifier = Modifier.width(8.dp))
                 OutlinedButton(onClick = onReset) {
                     Icon(
-                        imageVector = Icons.Filled.Stop,
-                        contentDescription = "Przerwij"
+                        imageVector = Icons.Default.Replay,
+                        contentDescription = "Resetuj stoper"
                     )
                 }
             }
@@ -872,7 +876,7 @@ fun RouteResultsScreen(
     val sortOrder by viewModel.sortOrder.collectAsState()
     val showDeleteConfirm = remember { mutableStateOf<RouteResultEntity?>(null) }
 
-    // Logika sortowania listy w pamięci (UI)
+    // logika sortowania
     val sortedResults = remember(results, sortType, sortOrder) {
         when (sortType) {
             ResultSortType.TIME -> if (sortOrder == ResultSortOrder.ASC) results.sortedBy { it.timeInSeconds } else results.sortedByDescending { it.timeInSeconds }
@@ -880,7 +884,7 @@ fun RouteResultsScreen(
         }
     }
 
-    // Dialog potwierdzenia usunięcia (identyczny jak przy resecie)
+    // potwierdzenie usunięcia wyniku
     if (showDeleteConfirm.value != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm.value = null },
@@ -911,13 +915,13 @@ fun RouteResultsScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // 1. KAFELKI STATYSTYK
+            // statystyki
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(label = "Najlepszy czas", value = if (results.isNotEmpty()) viewModel.formatTime(results.minOf { it.timeInSeconds }) else "--", Modifier.weight(1f))
                 StatCard(label = "Liczba biegów", value = results.size.toString(), Modifier.weight(1f))
             }
 
-            // 2. NAGŁÓWEK SORTOWANIA
+            // nagłówek z sortowaniem
             Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     SortHeaderItem("Czas", ResultSortType.TIME, sortType, sortOrder, Modifier.weight(1f)) { viewModel.toggleSort(it) }
@@ -926,7 +930,7 @@ fun RouteResultsScreen(
                 }
             }
 
-            // 3. LISTA WYNIKÓW (duże karty)
+            // dane
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(sortedResults) { result ->
                     Card(modifier = Modifier.fillMaxWidth()) {
