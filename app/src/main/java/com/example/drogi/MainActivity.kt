@@ -58,6 +58,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -296,6 +298,7 @@ fun RouteListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val isError by viewModel.isError.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
 
     Scaffold(
         topBar = {
@@ -313,6 +316,29 @@ fun RouteListScreen(
                         val isDark by viewModel.isDarkTheme.collectAsState()
                         ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
                     }
+                )
+
+                // wyszukiwanie trasy
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.updateSearchQuery(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("Szukaj trasy...") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Szukaj")
+                    },
+                    trailingIcon = {
+                        // Jeśli wpisano tekst, pokazujemy krzyżyk do szybkiego czyszczenia
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Wyczyść")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
                 )
 
                 TabRow(selectedTabIndex = pagerState.currentPage) {
@@ -382,10 +408,20 @@ fun RouteListScreen(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
-                    val pageRoutes = when (page) {
+                    val tabFilteredRoutes = when (page) {
                         0 -> allRoutes.filter { it.type == RouteType.RUNNING }
                         1 -> allRoutes.filter { it.type == RouteType.CYCLING }
                         else -> allRoutes.filter { favoriteIds.contains(it.id) }
+                    }
+
+                    val pageRoutes = if (searchQuery.isBlank()) {
+                        tabFilteredRoutes
+                    } else {
+                        tabFilteredRoutes.filter { route ->
+                            // ignoreCase aby wielkość liter nie miała znaczenia
+                            route.name.contains(searchQuery, ignoreCase = true) ||
+                                    route.description.contains(searchQuery, ignoreCase = true)
+                        }
                     }
 
                     if (page == 2 && pageRoutes.isEmpty()) {

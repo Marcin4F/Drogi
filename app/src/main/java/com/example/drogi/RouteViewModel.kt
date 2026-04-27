@@ -58,6 +58,11 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
 
     private var timerJob: Job? = null
 
+    // ---- wyszukiwanie ----
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    // ---- funkcje ----
     init {
         loadRoutes()
 
@@ -202,6 +207,11 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
                 dao.addFavorite(FavoriteEntity(routeId))
             }
         }
+    }
+
+    // ---- wyszukiwanie ----
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 }
 
