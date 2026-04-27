@@ -116,11 +116,12 @@ fun AdaptiveAppScreen(viewModel: RouteViewModel) {
 fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     val navController = rememberNavController()
     val selectedRouteId by viewModel.selectedRouteId.collectAsState()
+    val isShowingResults by viewModel.isShowingResults.collectAsState()
 
-    // widok tablet -> widok telefon z wybrana trasa
     LaunchedEffect(Unit) {
         if (selectedRouteId != null) {
-            navController.navigate("routeDetail/$selectedRouteId") {
+            val destination = if (isShowingResults) "routeResults/$selectedRouteId" else "routeDetail/$selectedRouteId"
+            navController.navigate(destination) {
                 popUpTo("routeList")
             }
         }
@@ -130,15 +131,15 @@ fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     LaunchedEffect(navBackStackEntry) {
         val currentRoute = navBackStackEntry?.destination?.route
+
+        // czy pokazywane wyniki
+        viewModel.setShowResults(currentRoute?.startsWith("routeResults") == true)
+
         if (currentRoute == "routeList") {
-            // powrot na liste tras
             viewModel.selectRouteForDetail(null)
         } else if (currentRoute?.startsWith("routeDetail") == true) {
-            // wybranie trasy
             val routeId = navBackStackEntry?.arguments?.getString("routeId")
-            if (routeId != null) {
-                viewModel.selectRouteForDetail(routeId)
-            }
+            if (routeId != null) viewModel.selectRouteForDetail(routeId)
         }
     }
 
@@ -204,6 +205,7 @@ fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     // aktualnie wybrana trasa
     val selectedRouteId by viewModel.selectedRouteId.collectAsState()
     val selectedRoute = viewModel.getRouteById(selectedRouteId)
+    val isShowingResults by viewModel.isShowingResults.collectAsState()
 
     Row(modifier = Modifier.fillMaxSize()) {
         // lewa strona z trasami
@@ -220,7 +222,7 @@ fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
             )
         }
 
-        // podzial ekranow
+        // podział ekranu
         VerticalDivider(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
             modifier = Modifier.fillMaxHeight()
@@ -228,16 +230,22 @@ fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
 
         // prawa strona
         Box(modifier = Modifier.weight(1.5f)) {
-            RouteDetailScreen(
-                route = selectedRoute,
-                requestedRouteId = selectedRouteId,
-                viewModel = viewModel,
-                onBackClick = null, // ukrycie przycisku powrotu
-                onNavigateToActiveRoute = { activeId ->
-                    viewModel.selectRouteForDetail(activeId)
-                },
-                onNavigateToResults = {}
-            )
+            if (isShowingResults && selectedRouteId != null) {
+                RouteResultsScreen(
+                    route = selectedRoute,
+                    viewModel = viewModel,
+                    onBackClick = { viewModel.setShowResults(false) } // powrót do ekranu szczegółów
+                )
+            } else {
+                RouteDetailScreen(
+                    route = selectedRoute,
+                    requestedRouteId = selectedRouteId,
+                    viewModel = viewModel,
+                    onBackClick = null,
+                    onNavigateToActiveRoute = { viewModel.selectRouteForDetail(it) },
+                    onNavigateToResults = { viewModel.setShowResults(true) }
+                )
+            }
         }
     }
 }
@@ -527,7 +535,6 @@ fun RouteDetailScreen(
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val isRunning by viewModel.isTimerRunning.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
-    val showAllResults = remember { mutableStateOf(false) }
     val showResetConfirmation = remember { mutableStateOf(false) }
     var hasTriggeredBack = remember { mutableStateOf(false) }
     val swipeBackModifier = if (onBackClick != null) {
@@ -606,9 +613,9 @@ fun RouteDetailScreen(
 
                         ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
 
-                        // ikona z tabela wynikow
+                        // ikona z tabelą wynikow
                         if (isShortScreen && route != null) {
-                            IconButton(onClick = { showAllResults.value = true }) {
+                            IconButton(onClick = { onNavigateToResults(route.id) }) {
                                 Icon(
                                     imageVector = Icons.Default.TableChart,
                                     contentDescription = "Pokaż wyniki",

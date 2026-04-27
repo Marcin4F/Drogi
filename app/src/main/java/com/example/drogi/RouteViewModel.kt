@@ -28,11 +28,6 @@ data class Route(
 class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _allRoutes = MutableStateFlow<List<Route>>(emptyList())
     val allRoutes: StateFlow<List<Route>> = _allRoutes.asStateFlow()
-    private val _selectedType = MutableStateFlow(RouteType.RUNNING)
-    val selectedType: StateFlow<RouteType> = _selectedType.asStateFlow()
-
-    private val _filteredRoutes = MutableStateFlow<List<Route>>(emptyList())
-    val filteredRoutes: StateFlow<List<Route>> = _filteredRoutes.asStateFlow()
 
     // ---- motywy ----
     private val _isDarkTheme = MutableStateFlow(false) // Domyślnie jasny
@@ -73,6 +68,10 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
     private val _sortOrder = MutableStateFlow(ResultSortOrder.ASC)
     val sortOrder = _sortOrder.asStateFlow()
 
+    // ---- ekran wyników ----
+    private val _isShowingResults = MutableStateFlow(false)
+    val isShowingResults: StateFlow<Boolean> = _isShowingResults.asStateFlow()
+
     // ---- funkcje ----
     init {
         loadRoutes()
@@ -92,26 +91,15 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
             try {
                 val downloadedRoutes = RetrofitClient.apiService.getRoutes()
                 _allRoutes.value = downloadedRoutes
-                updateFilteredList()
                 _isError.value = false
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isError.value = true
                 _allRoutes.value = emptyList()
-                updateFilteredList()
             } finally {
                 _isLoading.value = false
             }
         }
-    }
-
-    fun selectType(type: RouteType) {
-        _selectedType.value = type
-        updateFilteredList()
-    }
-
-    private fun updateFilteredList() {
-        _filteredRoutes.value = _allRoutes.value.filter { it.type == _selectedType.value }
     }
 
     fun getRouteById(id: String?): Route? {
@@ -124,6 +112,7 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
 
     fun selectRouteForDetail(routeId: String?) {
         _selectedRouteId.value = routeId
+        _isShowingResults.value = false
     }
 
     // ---- stoper ----
@@ -235,6 +224,11 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
             _sortType.value = type
             _sortOrder.value = ResultSortOrder.ASC
         }
+    }
+
+    // ---- ekran wyników ----
+    fun setShowResults(show: Boolean) {
+        _isShowingResults.value = show
     }
 }
 
