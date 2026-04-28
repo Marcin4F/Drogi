@@ -41,26 +41,30 @@ fun AdaptiveAppScreen(viewModel: RouteViewModel) {
 @Composable
 fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
     val navController = rememberNavController()
-    val selectedRouteId by viewModel.selectedRouteId.collectAsState()
-    val isShowingResults by viewModel.isShowingResults.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
 
-    LaunchedEffect(selectedRouteId, isShowingResults) {
-        if (selectedRouteId != null) {
-            val destination = if (isShowingResults) {
-                Screen.RouteResults.createRoute(selectedRouteId!!)
-            } else {
-                Screen.RouteDetail.createRoute(selectedRouteId!!)
-            }
-            navController.navigate(destination) {
+    // Odtworzenie stanu
+    LaunchedEffect(Unit) {
+        val selectedId = viewModel.selectedRouteId.value
+        val showingResults = viewModel.isShowingResults.value
+
+        if (selectedId != null) {
+            // otworzenie aktywności szczegółów
+            navController.navigate(Screen.RouteDetail.createRoute(selectedId)) {
                 popUpTo(Screen.RouteList.route)
+            }
+            // otworzenie aktywności wyników
+            if (showingResults) {
+                navController.navigate(Screen.RouteResults.createRoute(selectedId))
             }
         }
     }
 
+    // aktualizacja stanu
     LaunchedEffect(navBackStackEntry) {
         val currentRoute = navBackStackEntry?.destination?.route
-        viewModel.setShowResults(currentRoute?.startsWith("routeResults") == true)
+
+        viewModel.setShowResults(currentRoute == Screen.RouteResults.route)
 
         when {
             currentRoute == Screen.RouteList.route -> viewModel.selectRouteForDetail(null)
@@ -106,7 +110,7 @@ fun PhoneNavigation(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
             RouteResultsScreen(
                 route = viewModel.getRouteById(routeId),
                 viewModel = viewModel,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() } // Teraz to poprawie cofnie na DetailScreen
             )
         }
     }
