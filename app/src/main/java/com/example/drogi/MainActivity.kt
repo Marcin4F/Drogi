@@ -69,6 +69,11 @@ import androidx.compose.ui.draw.alpha
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.automirrored.filled.DirectionsBike
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.LocalIndication
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -231,7 +236,8 @@ fun TabletSplitScreen(viewModel: RouteViewModel, onBackToHome: () -> Unit) {
                 onActiveTimerClick = { activeId ->
                     viewModel.selectRouteForDetail(activeId)
                 },
-                onBackToHome = onBackToHome
+                onBackToHome = onBackToHome,
+                showThemeToggle = false
             )
         }
 
@@ -334,7 +340,8 @@ fun RouteListScreen(
     viewModel: RouteViewModel,
     onRouteClick: (String) -> Unit,
     onActiveTimerClick: (String) -> Unit,
-    onBackToHome: () -> Unit
+    onBackToHome: () -> Unit,
+    showThemeToggle: Boolean = true
 ) {
     val allRoutes by viewModel.allRoutes.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
@@ -345,8 +352,15 @@ fun RouteListScreen(
     val isError by viewModel.isError.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val focusManager = LocalFocusManager.current
+    val isSearchFocused = remember { mutableStateOf(false) }
 
     Scaffold(
+        modifier = Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = {
+                focusManager.clearFocus() // schowanie klawiatury
+            })
+        },
         topBar = {
             Column {
                 TopAppBar(
@@ -359,8 +373,10 @@ fun RouteListScreen(
                         }
                     },
                     actions = {
-                        val isDark by viewModel.isDarkTheme.collectAsState()
-                        ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
+                        if (showThemeToggle) {
+                            val isDark by viewModel.isDarkTheme.collectAsState()
+                            ThemeToggleIcon(isDarkTheme = isDark, onToggle = { viewModel.toggleTheme() })
+                        }
                     }
                 )
 
@@ -370,7 +386,8 @@ fun RouteListScreen(
                     onValueChange = { viewModel.updateSearchQuery(it) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .onFocusChanged { isSearchFocused.value = it.isFocused },
                     placeholder = { Text("Szukaj trasy...") },
                     leadingIcon = {
                         Icon(imageVector = Icons.Default.Search, contentDescription = "Szukaj")
@@ -487,12 +504,23 @@ fun RouteListScreen(
                                 .padding(horizontal = 16.dp)
                         ) {
                             items(pageRoutes) { route ->
+                                val interactionSource = remember { MutableInteractionSource() }
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 8.dp)
                                         .height(100.dp)
-                                        .clickable { onRouteClick(route.id) },
+                                        .clickable (
+                                            interactionSource = interactionSource,
+                                            // włączenie/wyłączenie animacji kliknięcia na karte
+                                            indication = if (isSearchFocused.value) null else LocalIndication.current
+                                        ) {
+                                            if (isSearchFocused.value) {
+                                                focusManager.clearFocus()
+                                            } else {
+                                                onRouteClick(route.id)
+                                            }
+                                        },
                                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize()) {
@@ -549,7 +577,7 @@ fun RouteDetailScreen(
     val isRunning by viewModel.isTimerRunning.collectAsState()
     val activeTimerId by viewModel.activeTimerRouteId.collectAsState()
     val showResetConfirmation = remember { mutableStateOf(false) }
-    var hasTriggeredBack = remember { mutableStateOf(false) }
+    val hasTriggeredBack = remember { mutableStateOf(false) }
     val swipeBackModifier = if (onBackClick != null) {
         Modifier.pointerInput(Unit) {
             detectHorizontalDragGestures(
