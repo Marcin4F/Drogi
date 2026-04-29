@@ -11,6 +11,10 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.ViewModelProvider
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class RouteType { RUNNING, CYCLING }
 
@@ -87,11 +91,27 @@ class RouteViewModel(private val dao: RouteResultDao) : ViewModel() {
         viewModelScope.launch {
             _isLoading.value = true
             _isError.value = false
-            // z obslugą błędu API
+
             try {
-                val downloadedRoutes = RetrofitClient.apiService.getRoutes()
-                _allRoutes.value = downloadedRoutes
-                _isError.value = false
+                // czekanie na odpowiedź przez 5 seknud
+                // dispatchers przenosi pracę sieciową na inny wątek
+                val downloadedRoutes = withContext(Dispatchers.IO) {
+                    withTimeoutOrNull(5000L) {
+                        RetrofitClient.apiService.getRoutes()
+                    }
+                }
+
+                if (downloadedRoutes != null) {
+                    _allRoutes.value = downloadedRoutes
+                    _isError.value = false
+                } else {
+                    // timeout
+                    _isError.value = true
+                    _allRoutes.value = emptyList()
+                }
+
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isError.value = true
